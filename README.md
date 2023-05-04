@@ -1,7 +1,23 @@
-# 基于深度强化学习的柔性作业车间调度问题代码
-## 单目标柔性作业车间动态调度问题
+Deep reinforcement learning algorithms for flexible job shop scheduling problems
+# The introudce of code files
+## agents
+### the deep reinforcement learnging angents, including in DA3C/MPTD3/HMPSAC.
+## environmet
+### the scheduling environment of SO_DFJSP/MO_FJSSP/MO_DFJSP.
+## network
+### the trained policy network of agents.
+## data
+### the instance data for papers.
+## result
+### the result of all instance in data, including in tables/figures.
+## rules
+### scheduling rules for comparison
+## reference code
+### the relevance code for linear programming.
 
-## 多目标柔性作业车间静态调度问题
+# single-objective dynamic problem(SO_DFJSP)-DA3C
 
-## 多目标柔性作业车间动态调度问题
+# multi-objective static problem(MO_FJSSP)-MPTD3
+
+# multi-objective dynamic problem(MO_DFJSP)-HMPSAC
 
