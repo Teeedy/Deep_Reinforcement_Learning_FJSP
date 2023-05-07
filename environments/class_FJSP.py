@@ -1,5 +1,5 @@
 """
-ÈáĞÔ×÷Òµ³µ¼äµ÷¶È»ù´¡Àà¶¨Òå
+æŸ”æ€§ä½œä¸šè½¦é—´è°ƒåº¦åŸºç¡€ç±»å®šä¹‰
 """
 import copy
 import random, math
@@ -7,59 +7,55 @@ import time
 import numpy as np
 from SO_DFJSP_instance import Instance
 from data.data_process import Data
-import matlab
-import matlab.engine
-from scipy.optimize import minimize, NonlinearConstraint
+from docplex.mp.model import Model
 
 class Order():
-    """¶©µ¥¶ÔÏó"""
+    """è®¢å•å¯¹è±¡"""
     def __init__(self, s, arrive, delivery, count_kind):
-        # »ù±¾ÊôĞÔ
+        # åŸºæœ¬å±æ€§
         self.order_node = s
-        self.time_arrive = arrive  # µ½´ïÊ±¼ä
-        self.time_delivery = delivery  # ½»ÆÚÊ±¼ä
-        self.count_kind = count_kind  # °üº¬µÄ¸÷ÖÖ¹¤¼şµÄÊıÁ¿
+        self.time_arrive = arrive  # åˆ°è¾¾æ—¶é—´
+        self.time_delivery = delivery  # äº¤æœŸæ—¶é—´
+        self.count_kind = count_kind  # åŒ…å«çš„å„ç§å·¥ä»¶çš„æ•°é‡
 
 class Kind():
-    """¹¤¼şÀàĞÍÀà"""
+    """å·¥ä»¶ç±»å‹ç±»"""
     def __init__(self, r):
         self.kind = r
-        self.job_arrive_list = []  # ÒÑ¾­µ½´ïµÄ¹¤¼ş¶ÔÏóÁĞ±í
-        self.job_unfinished_list = []  # Î´¼Ó¹¤Íê³ÉµÄ¹¤¼ş¶ÔÏóÁĞ±í
+        self.job_arrive_list = []  # å·²ç»åˆ°è¾¾çš„å·¥ä»¶å¯¹è±¡åˆ—è¡¨
+        self.job_unfinished_list = []  # æœªåŠ å·¥å®Œæˆçš„å·¥ä»¶å¯¹è±¡åˆ—è¡¨
     @property
     def job_number(self):
-        """¸ÃÀàĞÍ¹¤¼şÒÑµ½´ï¹¤¼şÊı"""
+        """è¯¥ç±»å‹å·¥ä»¶å·²åˆ°è¾¾å·¥ä»¶æ•°"""
         return len(self.job_arrive_list)
 
 class Tasks(Kind):
-    """¶¨Òå¹¤Ğòo_rjÀà"""
+    """å®šä¹‰å·¥åºo_rjç±»"""
     def __init__(self, r, j):
-        Kind.__init__(self, r)  # µ÷ÓÃ¸¸ÀàµÄ¹¹º¯
-        # »ù±¾ÊôĞÔ
-        self.task = j  # ËùÊô¹¤Ğò
-        self.machine_tuple = None  # ¿ÉÑ¡¼Ó¹¤»úÆ÷±àºÅÔª×é
-        # ¸½¼ÓÊôĞÔ
-        self.job_now_list = []  # ´¦ÓÚ¸Ã¹¤Ğò¶ÎµÄ¹¤¼ş¶ÔÏóÁĞ±í
-        self.job_unprocessed_list = []  # ¸Ã¹¤Ğò¶ÎÎ´±»¼Ó¹¤µÄ¹¤¼ş¶ÔÏóÁĞ±í
-        self.task_unprocessed_list = []  # ¸Ã¹¤Ğò¶Î»¹Î´¼Ó¹¤µÄ¹¤Ğò¶ÔÏóÁĞ±í
-        self.task_processed_list = []  # ¸Ã¹¤Ğò¶ÎÒÑ¼Ó¹¤µÄ¹¤Ğò¶ÔÏóÁĞ±í
-        # Á÷ÌåÏà¹ØÊôĞÔ
-        self.fluid_time = None  # Á÷ÌåÄ£ĞÍÖĞ¸Ã¹¤ĞòµÄ¼Ó¹¤Ê±¼ä
-        self.fluid_rate = None  # Á÷ÌåÄ£ĞÍÖĞ¼Ó¹¤¸Ã¹¤ĞòµÄËÙÂÊ
-        self.fluid_number = None  # ´¦ÓÚ¸Ã¹¤Ğò¶ÎµÄÁ÷ÌåÊıÁ¿
-        self.fluid_unprocessed_number = None  # Î´±»¼Ó¹¤µÄÁ÷ÌåÊı
-        self.fluid_unprocessed_number_start = None  # ¶©µ¥µ½´ïÊ±¿ÌÎ´±»¼Ó¹¤µÄÁ÷ÌåÊı
-        # Á÷Ìå»úÆ÷Ïà¹ØÊôĞÔ
-        self.fluid_machine_list = []  # Á÷ÌåÄ£ĞÍÖĞ¿ÉÑ¡¼Ó¹¤»úÆ÷±àºÅÁĞ±í
+        Kind.__init__(self, r)  # è°ƒç”¨çˆ¶ç±»çš„æ„å‡½
+        # åŸºæœ¬å±æ€§
+        self.task = j  # æ‰€å±å·¥åº
+        self.machine_tuple = None  # å¯é€‰åŠ å·¥æœºå™¨ç¼–å·
+        # é™„åŠ å±æ€§
+        self.job_now_list = []  # å¤„äºè¯¥å·¥åºæ®µçš„å·¥ä»¶å¯¹è±¡åˆ—è¡¨
+        self.job_unprocessed_list = []  # è¯¥å·¥åºæ®µæœªè¢«åŠ å·¥çš„å·¥ä»¶å¯¹è±¡åˆ—è¡¨
+        self.task_unprocessed_list = []  # è¯¥å·¥åºæ®µè¿˜æœªåŠ å·¥çš„å·¥åºå¯¹è±¡åˆ—è¡¨
+        self.task_processed_list = []  # è¯¥å·¥åºæ®µå·²åŠ å·¥çš„å·¥åºå¯¹è±¡åˆ—è¡¨
+        # æµä½“ç›¸å…³å±æ€§
+        self.fluid_time_sum = None  # æµä½“æ¨¡å‹ä¸­è¯¥å·¥åºçš„åŠ å·¥æ—¶é—´
+        self.fluid_rate_sum = None  # æµä½“æ¨¡å‹ä¸­åŠ å·¥è¯¥å·¥åºçš„é€Ÿç‡
+        self.fluid_number = None  # å¤„äºè¯¥å·¥åºæ®µçš„æµä½“æ•°é‡
+        self.fluid_unprocessed_number = None  # æœªè¢«åŠ å·¥çš„æµä½“æ•°
+        self.fluid_unprocessed_number_start = None  # è®¢å•åˆ°è¾¾æ—¶åˆ»æœªè¢«åŠ å·¥çš„æµä½“æ•°
 
-    # ¼ÆËãÊôĞÔ
+    # è®¡ç®—å±æ€§
     @property
     def gap(self):
-        """Á÷Ìågap_rjÖµ"""
+        """æµä½“gap_rjå€¼"""
         return (len(self.task_unprocessed_list) - self.fluid_unprocessed_number)/self.fluid_unprocessed_number_start
     @property
     def finish_rate(self):
-        """o_rjÍê³ÉÂÊ"""
+        """o_rjå®Œæˆç‡"""
         return len(self.task_processed_list)/(len(self.task_unprocessed_list) + len(self.task_processed_list))
     @property
     def due_date_min(self):
@@ -69,181 +65,182 @@ class Tasks(Kind):
         return sum([job.due_data for job in self.job_unprocessed_list])/len(self.job_unprocessed_list)
 
 class Job(Kind):
-    """¹¤¼şÀà"""
+    """å·¥ä»¶ç±»"""
     def __init__(self, r, n):
-        Kind.__init__(self, r)  # µ÷ÓÃ¸¸ÀàµÄ¹¹º¯
-        # »ù±¾ÊôĞÔ
-        self.number = n  # ¸Ã¹¤¼şÀàĞÍµÄµÚ¼¸¸ö¹¤¼ş
-        # ¸½¼ÓÊôĞÔ
-        self.due_date = None  # ¸Ã¹¤¼şµÄ½»ÆÚ
-        self.task_list = []  # ÒÑ´¦Àí¹¤Ğò¶ÔÏóÁĞ±í
+        Kind.__init__(self, r)  # è°ƒç”¨çˆ¶ç±»çš„æ„å‡½
+        # åŸºæœ¬å±æ€§
+        self.number = n  # è¯¥å·¥ä»¶ç±»å‹çš„ç¬¬å‡ ä¸ªå·¥ä»¶
+        # é™„åŠ å±æ€§
+        self.due_date = None  # è¯¥å·¥ä»¶çš„äº¤æœŸ
+        self.task_list = []  # å·²å¤„ç†å·¥åºå¯¹è±¡åˆ—è¡¨
 
 class Task(Tasks, Job):
-    """¹¤ĞòÀà"""
+    """å·¥åºç±»"""
     def __init__(self, r, n, j):
-        Tasks.__init__(self, r, j)  # µ÷ÓÃ¸¸ÀàµÄ¹¹º¯
-        Job.__init__(self, r, n)  # µ÷ÓÃ¸¸Àà¹¹º¯
-        # ¸½¼ÓÊôĞÔ
-        self.machine = None  # Ñ¡ÔñµÄ»úÆ÷
-        self.time_end = None  # ¼Ó¹¤½áÊøÊ±¼ä
-        self.time_begin = None  # ¼Ó¹¤¿ªÊ¼Ê±¼ä
-        self.time_cost = None  # ¼Ó¹¤Ê±¼ä
+        Tasks.__init__(self, r, j)  # è°ƒç”¨çˆ¶ç±»çš„æ„å‡½
+        Job.__init__(self, r, n)  # è°ƒç”¨çˆ¶ç±»æ„å‡½
+        # é™„åŠ å±æ€§
+        self.machine = None  # é€‰æ‹©çš„æœºå™¨
+        self.time_end = None  # åŠ å·¥ç»“æŸæ—¶é—´
+        self.time_begin = None  # åŠ å·¥å¼€å§‹æ—¶é—´
+        self.time_cost = None  # åŠ å·¥æ—¶é—´
 
 class Machine():
-    """»úÆ÷Àà"""
+    """æœºå™¨ç±»"""
     def __init__(self, m):
-        # »ù±¾ÊôĞÔ
-        self.machine_node = m  # »úÆ÷±àºÅ
-        self.kind_task_tuple = None  # ¿ÉÑ¡¼Ó¹¤¹¤ĞòÀàĞÍÔª×é
-        self.process_rate_rj_dict = {}  # ¼Ó¹¤¸÷¹¤ĞòÀàĞÍµÄËÙÂÊ
-        # ¸½¼ÓÊôĞÔ
-        self.machine_state = 0  # »úÆ÷×´Ì¬
-        self.time_end = 0  # »úÆ÷Íê¹¤Ê±¼ä
-        self.task_list = []  # »úÆ÷ÒÑ¼Ó¹¤¹¤Ğò¶ÔÏóÁĞ±í
-        self.unprocessed_rj_dict = {}  # Î´±»m¼Ó¹¤µÄ¸÷¹¤ĞòÀàĞÍµÄ¹¤Ğò×ÜÊı
-        # Á÷Ìå¸½¼ÓÊôĞÔ
-        self.fluid_kind_task_list = []  # Á÷Ìå½âÖĞ¿ÉÑ¡¼Ó¹¤¹¤ĞòÀàĞÍÁĞ±í
-        self.time_rate_rj_dict = {}  # Á÷Ìå½âÖĞ·ÖÅä¸ø¸÷¹¤ĞòÀàĞÍµÄÊ±¼ä±ÈÀı
-        self.fluid_process_rate_rj_dict = {}  # Á÷Ìå½âÖĞ¼Ó¹¤¸÷¹¤ĞòÀàĞÍµÄËÙÂÊ
-        self.gap_rj_dict = {}  # Á÷Ìågap_mrjÖµ rj
-        self.fluid_unprocessed_rj_dict = {}  # Î´±»»úÆ÷m¼Ó¹¤µÄ¸÷¹¤ĞòÀàĞÍ×ÜÊı
-        self.fluid_unprocessed_rj_arrival_dict = {}  # ¶©µ¥µ½´ïÊ±¿ÌÎ´±»m¼Ó¹¤µÄ¸÷¹¤ĞòÀàĞÍÊıÁ¿
+        # åŸºæœ¬å±æ€§
+        self.machine_node = m  # æœºå™¨ç¼–å·
+        self.kind_task_tuple = None  # å¯é€‰åŠ å·¥å·¥åºç±»å‹å…ƒç»„
+        # é™„åŠ å±æ€§
+        self.machine_state = 0  # æœºå™¨çŠ¶æ€
+        self.time_end = 0  # æœºå™¨å®Œå·¥æ—¶é—´
+        self.task_list = []  # æœºå™¨å·²åŠ å·¥å·¥åºå¯¹è±¡åˆ—è¡¨
+        self.unprocessed_rj_dict = {}  # æœªè¢«måŠ å·¥çš„å„å·¥åºç±»å‹çš„å·¥åºæ€»æ•°
+        # æµä½“é™„åŠ å±æ€§
+        self.time_rate_rj_dict = {}  # æµä½“è§£ä¸­åˆ†é…ç»™å„å·¥åºç±»å‹çš„æ—¶é—´æ¯”ä¾‹
+        self.fluid_process_rate_rj_dict = {}  # æµä½“è§£ä¸­åŠ å·¥å„å·¥åºç±»å‹çš„é€Ÿç‡
+        self.gap_rj_dict = {}  # æµä½“gap_mrjå€¼ rj
+        self.fluid_unprocessed_rj_dict = {}  # æœªè¢«æœºå™¨måŠ å·¥çš„å„å·¥åºç±»å‹æµä½“æ€»æ•°
+        self.fluid_unprocessed_rj_arrival_dict = {}  # è®¢å•åˆ°è¾¾æ—¶åˆ»æœªè¢«måŠ å·¥çš„å„å·¥åºç±»å‹æµä½“æ•°
 
     def utilize_rate(self, step_time):
-        """ÀûÓÃÂÊ"""
+        """åˆ©ç”¨ç‡"""
         return sum([task.time_cost for task in self.task_list])/max(step_time, self.time_end)
 
-# ÎÊÌâÊµÀıÀà
+# é—®é¢˜å®ä¾‹ç±»
 class FJSP(Instance):
-    """ÈáĞÔ×÷Òµ³µ¼äµ÷¶ÈÀà"""
+    """æŸ”æ€§ä½œä¸šè½¦é—´è°ƒåº¦ç±»"""
     def __init__(self, DDT, M, S):
         Instance.__init__(self, DDT, M, S)
-        # ·â×°»ù±¾ÊôĞÔ
-        self.step_count = 0  # ¾ö²ß²½
-        self.step_time = 0  # Ê±¼äµã
-        self.last_observation_state = None  # ÉÏÒ»²½¹Û²ìµ½µÄ×´Ì¬ v(t-1)
-        self.observation_state = None  # µ±Ç°Ê±¼ä²½µÄ×´Ì¬ v(t)
+        # å°è£…åŸºæœ¬å±æ€§
+        self.step_count = 0  # å†³ç­–æ­¥
+        self.step_time = 0  # æ—¶é—´ç‚¹
+        self.last_observation_state = None  # ä¸Šä¸€æ­¥è§‚å¯Ÿåˆ°çš„çŠ¶æ€ v(t-1)
+        self.observation_state = None  # å½“å‰æ—¶é—´æ­¥çš„çŠ¶æ€ v(t)
         self.state_gap = None  # v(t) - v(t-1)
         self.state = None  # s(t)
-        self.next_state = None  # ÏÂÒ»²½×´Ì¬  s(t+1)
-        self.reward = None  # ¼´Ê±½±Àø
-        self.done = False  # ÊÇ·ñÎªÖÕÖ¹×´Ì¬
+        self.next_state = None  # ä¸‹ä¸€æ­¥çŠ¶æ€  s(t+1)
+        self.reward = None  # å³æ—¶å¥–åŠ±
+        self.done = False  # æ˜¯å¦ä¸ºç»ˆæ­¢çŠ¶æ€
 
-        # ÊµÀı»¯¹¤¼şÀàĞÍ¡¢¹¤¼ş¡¢¹¤ĞòÀàĞÍ¡¢¹¤ĞòºÍ»úÆ÷¶ÔÏó×Öµä
-        self.task_kind_dict = {(r, j): Tasks(r, j) for r in self.kind_tuple for j in self.task_r_dict[r]}  # ¹¤ĞòÀàĞÍ¶ÔÏó×Öµä
+        # å®ä¾‹åŒ–å·¥ä»¶ç±»å‹ã€å·¥ä»¶ã€å·¥åºç±»å‹ã€å·¥åºå’Œæœºå™¨å¯¹è±¡å­—å…¸
+        self.task_kind_dict = {(r, j): Tasks(r, j) for r in self.kind_tuple for j in self.task_r_dict[r]}  # å·¥åºç±»å‹å¯¹è±¡å­—å…¸
         self.order_dict = {s: Order(s, self.time_arrive_s_dict[s], self.time_delivery_s_dict[s], self.count_sr_dict[s])
-                           for s in self.order_tuple}  # ¶ÔÏó¶©µ¥×Öµä
-        self.kind_dict = {r: Kind(r) for r in self.kind_tuple}  # ¹¤¼şÀàĞÍ¶ÔÏó×Öµä
-        self.machine_dict = {m: Machine(m) for m in self.machine_tuple}  # »úÆ÷¶ÔÏó×Öµä
-        self.task_kind_number_dict = {}  # (r,n,j) ¹¤Ğò¶ÔÏó×Öµä ¶©µ¥µ½´ï¸üĞÂ
-        self.job_dict = {}  # (r,n)  # ¹¤¼ş¶ÔÏó×Öµä
-        self.reset_parameter()  # ³õÊ¼»¯²ÎÊı¶ÔÏóÖĞµÄÁĞ±íºÍ×Öµä
-        # Á÷ÌåºÅºÍ¹¤ĞòÀàĞÍºÅ»¥ÏàË÷Òı
-        self.fluid_tuple = tuple(fluid for fluid in range(len(self.kind_task_tuple)))  # Á÷Ìå±àºÅ
-        self.kind_task_fluid_dict = {fluid: self.kind_task_tuple[fluid] for fluid in self.fluid_tuple}  # Á÷Ìå¶ÔÓ¦µÄ¹¤ĞòÀàĞÍ
-        self.fluid_kind_task_dict = {self.kind_task_tuple[fluid]: fluid for fluid in self.fluid_tuple}  # ¹¤ĞòÀàĞÍ¶ÔÓ¦µÄÁ÷Ìå
-        self.process_rate_m_rj_list = [[self.machine_dict[m].process_rate_rj_dict[(r, j)] if (r, j) in self.kind_task_m_dict[m] else 0
-                                        for (r, j) in self.kind_task_tuple] for m in self.machine_tuple]  # »úÆ÷¼Ó¹¤Á÷ÌåËÙÂÊ
-        self.task_number_r_list = [len(self.task_r_dict[r]) for r in self.kind_tuple]  # ¸÷¹¤ĞòÀàĞÍµÄ¹¤ĞòÊı
-        self.fluid_end_tuple = tuple(self.fluid_kind_task_dict[(r, self.task_r_dict[r][-1])] for r in self.kind_tuple)
-        # ³õÊ¼»¯¸÷¶ÔÏóÊôĞÔ# ĞÂ¶©µ¥µ½´ïºó¸üĞÂ¸÷×Öµä¶ÔÏó
+                           for s in self.order_tuple}  # å¯¹è±¡è®¢å•å­—å…¸
+        self.kind_dict = {r: Kind(r) for r in self.kind_tuple}  # å·¥ä»¶ç±»å‹å¯¹è±¡å­—å…¸
+        self.machine_dict = {m: Machine(m) for m in self.machine_tuple}  # æœºå™¨å¯¹è±¡å­—å…¸
+        self.task_kind_number_dict = {}  # (r,n,j) å·¥åºå¯¹è±¡å­—å…¸ è®¢å•åˆ°è¾¾æ›´æ–°
+        self.job_dict = {}  # (r,n)  # å·¥ä»¶å¯¹è±¡å­—å…¸
+        self.reset_parameter()  # åˆå§‹åŒ–å‚æ•°å¯¹è±¡ä¸­çš„åˆ—è¡¨å’Œå­—å…¸
+        # æœºå™¨åŠ å·¥å·¥åºç±»å‹çš„é€Ÿç‡
+        self.process_rate_m_rj_list = {m: {(r, j): 1/self.time_mrj_dict[m][(r, j)]
+                                           for (r, j) in self.kind_task_m_dict[m]} for m in self.machine_tuple}  # æœºå™¨åŠ å·¥æµä½“é€Ÿç‡
+        # åˆå§‹åŒ–æµä½“è§£ä¸­å„æœºå™¨å¯é€‰åŠ å·¥å·¥åºç±»å‹ã€
+        # åˆå§‹åŒ–å„å¯¹è±¡å±æ€§# æ–°è®¢å•åˆ°è¾¾åæ›´æ–°å„å­—å…¸å¯¹è±¡
         self.reset_object_add()
-        # ³õÊ¼»¯¿ÕÏĞ»úÆ÷ÁĞ±íºÍ¿ÉÑ¡¹¤ĞòÀàĞÍÁĞ±í
-        self.machine_idle = []  # ¿ÕÏĞ»úÆ÷±àºÅÁĞ±í
-        self.kind_task_list = []  # ¿ÉÑ¡¹¤ĞòÀàĞÍ±àºÅÁĞ±í
-
+        # åˆå§‹åŒ–ç©ºé—²æœºå™¨åˆ—è¡¨å’Œå¯é€‰å·¥åºç±»å‹åˆ—è¡¨
+        self.machine_idle = []  # ç©ºé—²æœºå™¨ç¼–å·åˆ—è¡¨
+        self.kind_task_list = []  # å¯é€‰å·¥åºç±»å‹ç¼–å·åˆ—è¡¨
 
     def reset_parameter(self):
-        """³õÊ¼»¯¸÷×ÖµäºÍ²ÎÊı"""
+        """åˆå§‹åŒ–å„å­—å…¸å’Œå‚æ•°"""
         for r, kind in self.kind_dict.items():
-            kind.job_arrive_list = []  # ÒÑ¾­µ½´ïµÄ¹¤¼ş¶ÔÏóÁĞ±í
-            kind.job_unfinished_list = []  # Î´¼Ó¹¤Íê³ÉµÄ¹¤¼ş¶ÔÏóÁĞ±í
+            kind.job_arrive_list = []  # å·²ç»åˆ°è¾¾çš„å·¥ä»¶å¯¹è±¡åˆ—è¡¨
+            kind.job_unfinished_list = []  # æœªåŠ å·¥å®Œæˆçš„å·¥ä»¶å¯¹è±¡åˆ—è¡¨
         for (r, j), task_kind_object in self.task_kind_dict.items():
-            task_kind_object.machine_tuple = self.machine_rj_dict[(r, j)]  # ¿ÉÑ¡¼Ó¹¤»úÆ÷±àºÅÔª×é
-            task_kind_object.job_now_list = []  # ´¦ÓÚ¸Ã¹¤Ğò¶ÎµÄ¹¤¼ş¶ÔÏóÁĞ±í
-            task_kind_object.job_unprocessed_list = []  # ¸Ã¹¤Ğò¶ÎÎ´±»¼Ó¹¤µÄ¹¤¼ş¶ÔÏóÁĞ±í
-            task_kind_object.task_unprocessed_list = []  # ¸Ã¹¤Ğò¶Î»¹Î´¼Ó¹¤µÄ¹¤Ğò¶ÔÏóÁĞ±í
-            task_kind_object.task_processed_list = []  # ¸Ã¹¤Ğò¶ÎÒÑ¼Ó¹¤µÄ¹¤Ğò¶ÔÏóÁĞ±í
-            task_kind_object.fluid_machine_list = []  # Á÷ÌåÄ£ĞÍÖĞ¿ÉÑ¡¼Ó¹¤»úÆ÷
+            task_kind_object.machine_tuple = self.machine_rj_dict[(r, j)]  # å¯é€‰åŠ å·¥æœºå™¨ç¼–å·å…ƒç»„
+            task_kind_object.job_now_list = []  # å¤„äºè¯¥å·¥åºæ®µçš„å·¥ä»¶å¯¹è±¡åˆ—è¡¨
+            task_kind_object.job_unprocessed_list = []  # è¯¥å·¥åºæ®µæœªè¢«åŠ å·¥çš„å·¥ä»¶å¯¹è±¡åˆ—è¡¨
+            task_kind_object.task_unprocessed_list = []  # è¯¥å·¥åºæ®µè¿˜æœªåŠ å·¥çš„å·¥åºå¯¹è±¡åˆ—è¡¨
+            task_kind_object.task_processed_list = []  # è¯¥å·¥åºæ®µå·²åŠ å·¥çš„å·¥åºå¯¹è±¡åˆ—è¡¨
+            task_kind_object.fluid_machine_list = []  # æµä½“æ¨¡å‹ä¸­å¯é€‰åŠ å·¥æœºå™¨
         for m, machine_object in self.machine_dict.items():
-            machine_object.kind_task_tuple = self.kind_task_m_dict[m]  # ¿ÉÑ¡¼Ó¹¤¹¤ĞòÀàĞÍÔª×é
-            machine_object.machine_state = 0  # »úÆ÷×´Ì¬
-            machine_object.time_end = 0  # »úÆ÷Íê¹¤Ê±¼ä
-            machine_object.task_list = []  # »úÆ÷ÒÑ¼Ó¹¤¹¤Ğò¶ÔÏóÁĞ±í
-            machine_object.process_rate_rj_dict = {(r, j): 1/self.time_mrj_dict[m][(r, j)]
-                                                   for (r, j) in self.kind_task_m_dict[m]}  # ¼Ó¹¤¸÷¹¤ĞòÀàĞÍµÄËÙÂÊ
-            machine_object.unprocessed_rj_dict = {}  # Î´±»m¼Ó¹¤µÄ¹¤Ğòo_rjµÄ×ÜÊı (r,j)
-            # Á÷Ìå¸½¼ÓÊôĞÔ
-            machine_object.fluid_kind_task_list = []  # Á÷Ìå½âÖĞ¿ÉÑ¡¼Ó¹¤¹¤ĞòÀàĞÍÁĞ±í
-            machine_object.time_rate_rj_dict = {}  # Á÷Ìå½âÖĞ·ÖÅä¸ø¸÷¹¤ĞòÀàĞÍµÄÊ±¼ä±ÈÀı
-            machine_object.fluid_process_rate_rj_dict = {}  # Á÷Ìå½âÖĞ¼Ó¹¤¸÷¹¤ĞòÀàĞÍµÄËÙÂÊ
-            machine_object.gap_rj_dict = {}  # Á÷Ìågap_mrjÖµ rj
-            machine_object.fluid_unprocessed_rj_dict = {}  # Á÷Ìå½âÖĞÎ´±»»úÆ÷m¼Ó¹¤µÄ¸÷¹¤ĞòÀàĞÍ×ÜÊı
-            machine_object.fluid_unprocessed_rj_arrival_dict = {}  # ¶©µ¥µ½´ïÊ±¿ÌÎ´±»m¼Ó¹¤µÄ¸÷¹¤ĞòÀàĞÍÊıÁ¿
+            machine_object.kind_task_tuple = self.kind_task_m_dict[m]  # å¯é€‰åŠ å·¥å·¥åºç±»å‹å…ƒç»„
+            machine_object.machine_state = 0  # æœºå™¨çŠ¶æ€
+            machine_object.time_end = 0  # æœºå™¨å®Œå·¥æ—¶é—´
+            machine_object.task_list = []  # æœºå™¨å·²åŠ å·¥å·¥åºå¯¹è±¡åˆ—è¡¨
+            machine_object.unprocessed_rj_dict = {}  # æœªè¢«måŠ å·¥çš„å·¥åºo_rjçš„æ€»æ•° (r,j)
+            # æµä½“é™„åŠ å±æ€§
+            machine_object.fluid_kind_task_list = []  # æµä½“è§£ä¸­å¯é€‰åŠ å·¥å·¥åºç±»å‹åˆ—è¡¨
+            machine_object.time_rate_rj_dict = {}  # æµä½“è§£ä¸­åˆ†é…ç»™å„å·¥åºç±»å‹çš„æ—¶é—´æ¯”ä¾‹
+            machine_object.fluid_process_rate_rj_dict = {}  # æµä½“è§£ä¸­åŠ å·¥å„å·¥åºç±»å‹çš„é€Ÿç‡
+            machine_object.gap_rj_dict = {}  # æµä½“gap_mrjå€¼ rj
+            machine_object.fluid_unprocessed_rj_dict = {}  # æµä½“è§£ä¸­æœªè¢«æœºå™¨måŠ å·¥çš„å„å·¥åºç±»å‹æ€»æ•°
+            machine_object.fluid_unprocessed_rj_arrival_dict = {}  # è®¢å•åˆ°è¾¾æ—¶åˆ»æœªè¢«måŠ å·¥çš„å„å·¥åºç±»å‹æ•°é‡
 
         return None
 
     def reset_object_add(self):
-        """Ìí¼Ó×Öµä¶ÔÏó"""
-        order_object = self.order_dict[0]  # µ½´ïµÄĞÂ¶©µ¥
-        # ¸üĞÂ¹¤¼şÀàĞÍ×Öµä¡¢¹¤ĞòÀàĞÍ¶ÔÏó×Öµä¡¢¹¤Ğò¶ÔÏó×Öµä¡¢¹¤¼ş¶ÔÏó×Öµä¡¢
+        """æ·»åŠ å­—å…¸å¯¹è±¡"""
+        order_object = self.order_dict[0]  # åˆ°è¾¾çš„æ–°è®¢å•
+        # æ›´æ–°å·¥ä»¶ç±»å‹å­—å…¸ã€å·¥åºç±»å‹å¯¹è±¡å­—å…¸ã€å·¥åºå¯¹è±¡å­—å…¸ã€å·¥ä»¶å¯¹è±¡å­—å…¸ã€
         for r in self.kind_tuple:
             n_start = len(self.kind_dict[r].job_arrive_list)
             n_end = n_start + order_object.count_kind[r]
             for n in range(n_start, n_end):
-                job_object = Job(r, n)  # ¹¤¼ş¶ÔÏó
-                job_object.due_date = order_object.time_delivery  # ¹¤¼ş½»ÆÚ
+                job_object = Job(r, n)  # å·¥ä»¶å¯¹è±¡
+                job_object.due_date = order_object.time_delivery  # å·¥ä»¶äº¤æœŸ
                 job_object.task_list = []
                 self.kind_dict[r].job_arrive_list.append(job_object)
                 self.kind_dict[r].job_unfinished_list.append(job_object)
-                self.job_dict[(r, n)] = job_object  # ¼ÓÈë¹¤¼ş×Öµä
+                self.job_dict[(r, n)] = job_object  # åŠ å…¥å·¥ä»¶å­—å…¸
                 self.task_kind_dict[(r, 0)].job_now_list.append(job_object)
                 for j in self.task_r_dict[r]:
-                    task_object = Task(r, n, j)  # ¹¤Ğò¶ÔÏó
-                    task_object.due_date = self.job_dict[(r, n)].due_date  # ¹¤Ğò½»ÆÚ
+                    task_object = Task(r, n, j)  # å·¥åºå¯¹è±¡
+                    task_object.due_date = self.job_dict[(r, n)].due_date  # å·¥åºäº¤æœŸ
                     self.task_kind_dict[(r, j)].job_unprocessed_list.append(job_object)
                     self.task_kind_dict[(r, j)].task_unprocessed_list.append(task_object)
-                    self.task_kind_number_dict[(r, n, j)] = task_object  # ¼ÓÈë¹¤Ğò×Öµä
-        # ³õÊ¼»¯Á÷ÌåÊôĞÔ
+                    self.task_kind_number_dict[(r, n, j)] = task_object  # åŠ å…¥å·¥åºå­—å…¸
+        # åˆå§‹åŒ–æµä½“å±æ€§
         for (r, j), task_kind_object in self.task_kind_dict.items():
-            task_kind_object.fluid_number = len(task_kind_object.job_now_list)  # ´¦ÓÚ¸Ã¹¤Ğò¶ÎµÄÁ÷ÌåÊıÁ¿
-            task_kind_object.fluid_unprocessed_number = len(task_kind_object.task_unprocessed_list)  # Î´±»¼Ó¹¤µÄÁ÷ÌåÊı
-            task_kind_object.fluid_unprocessed_number_start = len(task_kind_object.task_unprocessed_list)  # ¶©µ¥µ½´ïÊ±¿ÌÎ´±»¼Ó¹¤µÄÁ÷ÌåÊıÁ¿
-        # Çó½âÁ÷ÌåÄ£ĞÍ¸üĞÂÁ÷ÌåÄ£ĞÍÊôĞÔ
-        self.fluid_model_delivery()
+            task_kind_object.fluid_number = len(task_kind_object.job_now_list)  # å¤„äºè¯¥å·¥åºæ®µçš„æµä½“æ•°é‡
+            task_kind_object.fluid_unprocessed_number = len(task_kind_object.task_unprocessed_list)  # æœªè¢«åŠ å·¥çš„æµä½“æ•°
+            task_kind_object.fluid_unprocessed_number_start = len(task_kind_object.task_unprocessed_list)  # è®¢å•åˆ°è¾¾æ—¶åˆ»æœªè¢«åŠ å·¥çš„æµä½“æ•°é‡
+        # æ±‚è§£æµä½“æ¨¡å‹æ›´æ–°æµä½“æ¨¡å‹å±æ€§
+        self.fluid_model()
 
-    def fluid_model_delivery(self):
+    def fluid_model(self):
         """
-        ÔËĞĞÁ÷ÌåÄ£ĞÍ¡ª¡ª¡ª¡ª¡ª¡ª»ùÓÚmatlabÒıÇæ
-        ÊäÈë£º¸÷¹¤ĞòÀàĞÍÎ´¼Ó¹¤¹¤Ğò×ÜÊı¡¢´¦ÓÚ¸Ã¹¤ĞòÀàĞÍ½×¶ÎµÄ¹¤¼şÊı
-        Êä³ö£º¸÷»úÆ÷·ÖÅä¸ø¸÷¹¤ĞòÀàĞÍµÄÊ±¼ä±ÈÀı¡¢Á÷Ìå×î´óÑÓ³ÙÊ±¼ä¡¢¸÷¹¤ĞòÀàĞÍ¿ÉÑ¡¼Ó¹¤»úÆ÷¡¢¸÷»úÆ÷¿ÉÑ¡¹¤ĞòÀàĞÍ+¼Ó¹¤ËÙÂÊ¡¢¸÷¹¤ĞòÀàĞÍ¼Ó¹¤ËÙÂÊ+Ê±¼ä
+        æœ€å°åŒ–æœ€å¤§å®Œå·¥æ—¶é—´ç›®æ ‡æµä½“æ¨¡å‹æ±‚è§£
         """
-        # Éú³É¸÷Á÷ÌåÏà¹ØÊı¾İ
-        fluid_number_list = [self.task_kind_dict[self.kind_task_fluid_dict[fluid]].fluid_unprocessed_number_start for fluid in self.fluid_tuple]
-        fluid_number_now_list = [self.task_kind_dict[self.kind_task_fluid_dict[fluid]].fluid_number for fluid in self.fluid_tuple]
-        # ¼ÆËãÃ¿ÖÖ¹¤¼şµÄÄ©Î²Á÷ÌåÃ¿¸öÁ÷ÌåµÄ½»ÆÚÊ±¼ä
-        fluid_end_number_list = [fluid_number_list[fluid] for fluid in self.fluid_end_tuple]  # ¸÷¹¤ĞòÀàĞÍ×îºóÒ»µÀ¹¤ĞòµÄ´ı¼Ó¹¤ÊıÁ¿
-        fluid_end_number_max = max(fluid_end_number_list)  # ×î´óÖµ
-        # ³õÊ¼»¯¸÷¹¤¼şÀàĞÍ×îºóÒ»µÀ¹¤ĞòÀàĞÍµÄ¸÷¹¤¼şµÄ½»ÆÚÊ±¼ä
-        fluid_end_number_delivery = np.zeros([len(fluid_end_number_list), fluid_end_number_max])
-        # ¸üĞÂÃ¿¸ö¹¤¼şµÄ½»ÆÚ
-        for f, fluid in enumerate(self.fluid_end_tuple):
-            rj_fluid = self.kind_task_fluid_dict[fluid]
-            for n, task_object in enumerate(self.task_kind_dict[rj_fluid].task_unprocessed_list):
-                fluid_end_number_delivery[f, n] = task_object.due_date - self.step_time
-        # Æô¶¯matlabÒıÇæÇó½âÄ£ĞÍ
-        time_start = time.clock()  # matlabÒıÇæÇó½â¿ªÊ¼Ê±¼ä
-        engine = matlab.engine.start_matlab()  # Æô¶¯ÒıÇæ
-        fluid_solve = engine.line_cplex(matlab.double(self.machine_tuple), matlab.double(self.fluid_tuple),
-                                        matlab.double(self.process_rate_m_rj_list), matlab.double(fluid_number_list),
-                                        matlab.double(fluid_number_now_list), matlab.double(self.task_number_r_list),
-                                        matlab.double(fluid_end_number_delivery), nargout=2)
-        engine.exit()  # ¹Ø±ÕÒıÇæ
-        print("matlabÇó½âºÄÊ±£º", time.clock() - time_start)
+        # åˆå§‹åŒ–æ¨¡å‹å¯¹è±¡
+        model = Model('LP')
+        # å®šä¹‰å†³ç­–å˜é‡
+        var_list = {(m, (r, j)) for m in self.machine_tuple for (r, j) in self.kind_task_m_dict[m]}
+        # å®šä¹‰å†³ç­–å˜é‡ä¸Šä¸‹ç•Œ
+        X = model.continuous_var_dict(var_list, lb=0, ub=1, name='X')
+        # å„æµä½“åˆå§‹æœªåŠ å·¥æ•°é‡
+        fluid_number = {(r, j): self.task_kind_dict[(r, j)].fluid_unprocessed_number_start
+                        for (r, j) in self.kind_task_tuple}
+        # å„æµä½“åˆå§‹ç¬æ€æ•°é‡
+        fluid_number_time = {(r, j): self.task_kind_dict[(r, j)].fluid_number for (r, j) in self.kind_task_tuple}
+        process_rate_rj_sum = {(r, j): sum(X[m, (r, j)] * self.process_rate_m_rj_list[m][(r, j)]
+                                           for m in self.machine_rj_dict[(r, j)]) for (r, j) in self.kind_task_tuple}
+        # å®šä¹‰ç›®æ ‡å‡½æ•°
+        model.maximize(model.min(process_rate_rj_sum[(r, j)]/fluid_number[(r, j)] for (r, j) in self.kind_task_tuple))
+        # æ·»åŠ çº¦æŸæ¡ä»¶
+        # æœºå™¨åˆ©ç”¨ç‡çº¦æŸ
+        model.add_constraints(model.sum(X[m, (r, j)] for (r, j) in self.kind_task_m_dict[m]) <= 1
+                              for m in self.machine_tuple)
+        # è§£çš„å¯è¡Œæ€§çº¦æŸ
+        model.add_constraints(process_rate_rj_sum[(r, j)] >= process_rate_rj_sum[(r, j+1)] for r in self.kind_tuple
+                              for j in self.task_r_dict[r][:-2] if fluid_number_time[(r, j+1)] == 0)
+        # æ±‚è§£æ¨¡å‹
+        solution = model.solve()
+        x = solution.get_value_dict(X)
 
-        return fluid_solve[0], fluid_solve[1]
+        # åŸºäºæµä½“è§£æ›´æ–°å„æœºå™¨å¯é€‰å·¥åºç±»å‹å’Œå„å·¥åºç±»å‹å¯é€‰æœºå™¨
+        self.machine_tuple = None  # å¯é€‰åŠ å·¥æœºå™¨ç¼–å·
+        self.kind_task_tuple = None  # å¯é€‰åŠ å·¥å·¥åºç±»å‹å…ƒç»„
+        self.time_rate_rj_dict = {}  # æµä½“è§£ä¸­åˆ†é…ç»™å„å·¥åºç±»å‹çš„æ—¶é—´æ¯”ä¾‹
+        self.fluid_process_rate_rj_dict = {}  # æµä½“è§£ä¸­åŠ å·¥å„å·¥åºç±»å‹çš„é€Ÿç‡
+        self.gap_rj_dict = {}  # æµä½“gap_mrjå€¼ rj
+        self.fluid_unprocessed_rj_dict = {}  # æœªè¢«æœºå™¨måŠ å·¥çš„å„å·¥åºç±»å‹æµä½“æ€»æ•°
+        self.fluid_unprocessed_rj_arrival_dict = {}  # è®¢å•åˆ°è¾¾æ—¶åˆ»æœªè¢«måŠ å·¥çš„å„å·¥åºç±»å‹æµä½“æ•°
 
-# ²âÊÔ»·¾³
+
+
+# æµ‹è¯•ç¯å¢ƒ
 if __name__ == '__main__':
     DDT = 1.0
     M = 15

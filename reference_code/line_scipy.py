@@ -1,33 +1,30 @@
 """
-scipy Çó½âÏßĞÔ¹æ»®´úÂë
+scipy çº¿æ€§è§„åˆ’æ±‚è§£å™¨
 """
-def run_fluid_model(self):
-    """
-    ÔËĞĞÁ÷ÌåÄ£ĞÍ
-    ÊäÈë£º¸÷¹¤ĞòÀàĞÍÎ´¼Ó¹¤¹¤Ğò×ÜÊı¡¢´¦ÓÚ¸Ã¹¤ĞòÀàĞÍ½×¶ÎµÄ¹¤¼şÊı
-    Êä³ö£º¸÷»úÆ÷·ÖÅä¸ø¸÷¹¤ĞòÀàĞÍµÄÊ±¼ä±ÈÀı¡¢Á÷Ìå×î´óÑÓ³ÙÊ±¼ä¡¢¸÷¹¤ĞòÀàĞÍ¿ÉÑ¡¼Ó¹¤»úÆ÷¡¢¸÷»úÆ÷¿ÉÑ¡¹¤ĞòÀàĞÍ+¼Ó¹¤ËÙÂÊ¡¢¸÷¹¤ĞòÀàĞÍ¼Ó¹¤ËÙÂÊ+Ê±¼ä
-    """
+from scipy.optimize import minimize
 
-    # Éú³É¸÷Á÷ÌåÏà¹ØÊı¾İ
+def fluid_model(self):
+    """
+    æœ€å¤§å®Œå·¥æ—¶é—´
+    """
     fluid_number = {(r, j): self.task_kind_dict[(r, j)].fluid_unprocessed_number_start for (r, j) in
                     self.kind_task_tuple}
     fluid_number_time = {(r, j): self.task_kind_dict[(r, j)].fluid_number for (r, j) in self.kind_task_tuple}
     task_end_r_dict = {r: self.task_r_dict[r][-1] for r in self.kind_tuple}
-    # ¾ö²ß±äÁ¿
     mrj_tuple = tuple((m, (r, j)) for m in self.machine_tuple for (r, j) in self.kind_task_m_dict[m])
     x_mrj_dict = {(m, (r, j)): mrj_tuple.index((m, (r, j))) for m in self.machine_tuple for (r, j) in
                   self.kind_task_m_dict[m]}
     mrj_x_dict = {mrj_tuple.index((m, (r, j))): (m, (r, j)) for m in self.machine_tuple for (r, j) in
                   self.kind_task_m_dict[m]}
-    # ¸÷±äÁ¿µÄ·¶Î§
+    # å®šä¹‰å†³ç­–å˜é‡è¾¹ç•Œ
     bound = [(0, 1) for (m, (r, j)) in mrj_tuple]
-    # Ìí¼ÓÔ¼ÊøÌõ¼ş
+    # æ·»åŠ çº¦æŸ
     cons_temp = []
     for m in self.machine_tuple:
         cons_temp.append({'type': 'ineq',
                           'fun': lambda x: 1 - sum(x[x_mrj_dict[(m, (r, j))]] for (r, j) in self.kind_task_m_dict[m])})
     cons = tuple(cons_temp)
-    # Çó½âÄ£ĞÍ
+    # æ±‚è§£æ¨¡å‹
     solution = minimize(self.objective, np.ones(len(mrj_tuple)), bounds=bound, constraints=cons)
     print(solution)
     print(solution.x)
@@ -37,14 +34,13 @@ def run_fluid_model(self):
 
 
 def objective(self, x):
-    """Ä¿±êº¯Êı"""
-    # ¾ö²ß±äÁ¿
+    """è®¡ç®—ç›®æ ‡å€¼"""
     mrj_tuple = tuple((m, (r, j)) for m in self.machine_tuple for (r, j) in self.kind_task_m_dict[m])
     x_mrj_dict = {(m, (r, j)): mrj_tuple.index((m, (r, j))) for m in self.machine_tuple for (r, j) in
                   self.kind_task_m_dict[m]}
     mrj_x_dict = {mrj_tuple.index((m, (r, j))): (m, (r, j)) for m in self.machine_tuple for (r, j) in
                   self.kind_task_m_dict[m]}
-    # ¼ÆËãÏà¹Ø²ÎÊı
+    # åˆå§‹åŒ–å‚æ•°
     fluid_number = {(r, j): self.task_kind_dict[(r, j)].fluid_unprocessed_number_start for (r, j) in
                     self.kind_task_tuple}
     fluid_number_time = {(r, j): self.task_kind_dict[(r, j)].fluid_number for (r, j) in self.kind_task_tuple}
@@ -52,12 +48,12 @@ def objective(self, x):
     fluid_due_date_dict = {
         (r, j): [task_object.due_date for task_object in self.task_kind_dict[(r, j)].task_unprocessed_list] for (r, j)
         in task_end_rj_dict}
-    # Ä¿±êÖĞµÄÏà¹Ø²ÎÊı
+    # è®¡ç®—å„ç±»çš„å®Œå·¥æ—¶é—´
     process_rate_sum = {(r, j): sum(
         x[x_mrj_dict[(m, (r, j))]] * self.machine_dict[m].process_rate_rj_dict[(r, j)] for m in
         self.machine_rj_dict[(r, j)]) for (r, j) in task_end_rj_dict}
     time_finish = {(r, j): fluid_number[(r, j)] / process_rate_sum[(r, j)] for (r, j) in task_end_rj_dict}
-    # ¼ÆËã×ÜµÄÑÓÆÚÊ±¼ä
+    # è®¡ç®—ç›®æ ‡å‡½æ•°
     fluid_finish_dict = {(r, j): [time_finish[(r, j)] / len(fluid_due_date_dict[(r, j)]) * (number + 1) for number in
                                   range(len(fluid_due_date_dict[(r, j)]))] for (r, j) in task_end_rj_dict}
     due_time_dict = {(r, j): [max(0, c - d) for c, d in zip(fluid_finish_dict[(r, j)], fluid_due_date_dict[(r, j)])] for

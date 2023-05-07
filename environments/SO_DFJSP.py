@@ -4,9 +4,6 @@ import time
 import numpy as np
 from SO_DFJSP_instance import Instance
 from data.data_process import Data
-import matlab
-import matlab.engine
-from scipy.optimize import minimize, NonlinearConstraint
 
 class Order():
     """订单对象"""
