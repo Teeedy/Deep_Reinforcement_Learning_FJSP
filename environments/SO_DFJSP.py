@@ -25,28 +25,23 @@ class SO_DFJSP_Environment(FJSP):
         self.observation_space = 12  # 观察的状态向量空间
         self.reward_sum = 0  # 累计回报
         # 空闲机器列表和可选工序类型列表
-        self.machine_idle_list = self.idle_machine()  # 空闲机器编号列表
-        self.kind_task_available = self.kind_task_available()  # 可选工序类型编号列表
+        self.machine_idle_list = []  # 空闲机器编号列表
+        self.kind_task_available_list = []  # 可选工序类型编号列表
         # 重置环境状态
         self.reset()
-
-        print("成功定义FJSP类")
-
-    def idle_machine(self):
-        """返回空闲机器列表"""
-        return [m for m in self.machine_tuple if self.machine_dict[m].state == 0]
-
-    def kind_task_available(self):
-        """返回可选加工工序列表"""
-        return [(r, j) for (r, j) in self.kind_task_tuple if len(self.kind_task_dict[(r, j)].job_now_list) > 0 and
-                set(self.kind_task_dict[(r, j)].fluid_machine_list) & set(self.machine_idle_list)]
+        print("成功定义环境类")
 
     def reset(self):
         """重置环境状态"""
+        # 初始化FJSP类
         self.reset_parameter()  # 初始化参数对象中的列表和字典
-        self.reset_object_add()  # 新订单到达后更新各字典对象
+        self.reset_object_add(self.order_dict[0])  # 新订单到达后更新各字典对象
+        self.machine_idle_list = self.idle_machine()  # 空闲机器编号列表
+        self.kind_task_available_list = self.kind_task_available()  # 可选工序类型编号列表
+        # 初始化当前时间和时间步
         self.step_count = 0
         self.step_time = 0
+        # 初始化状态向量
         self.last_observation_state = []  # 上一步观察到的状态
         self.observation_state = []  # 当前时间步的状态
         self.state_gap = np.array(self.observation_state) - np.array(self.observation_state)
@@ -55,6 +50,18 @@ class SO_DFJSP_Environment(FJSP):
         self.reward = None  # 即时奖励
         self.done = False  # 是否为终止状态
         return self.state
+
+    def observation_state(self):
+        """
+        提取状态向量
+        :return: 观察到的状态向量
+        """
+        # 初始化状态向量列表
+        state_list = []
+        # 添加向量元素
+        state_list.append(self.machine_count)  # 机器数
+        CT_M_std = math.sqrt(sum(math.pow())/self.machine_count)
+
 
     def step(self, action):
         """根据动作选择工序选择规则+机器分配规则"""
@@ -78,9 +85,18 @@ class SO_DFJSP_Environment(FJSP):
         """根据剩余工件估计延迟时间计算奖励"""
         return None
 
+    def idle_machine(self):
+        """返回空闲机器列表"""
+        return [m for m in self.machine_tuple if self.machine_dict[m].state == 0]
+
+    def kind_task_available(self):
+        """返回可选加工工序列表"""
+        return [(r, j) for (r, j) in self.kind_task_tuple if len(self.kind_task_dict[(r, j)].job_now_list) > 0 and
+                set(self.kind_task_dict[(r, j)].fluid_machine_list) & set(self.machine_idle_list)]
+
 # 测试环境
 if __name__ == '__main__':
     DDT = 1.0
     M = 15
     S = 4
-    fjsp_object = FJSP(DDT, M, S)
+    env_object = SO_DFJSP_Environment(DDT, M, S)

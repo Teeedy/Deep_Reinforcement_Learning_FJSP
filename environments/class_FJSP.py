@@ -132,21 +132,10 @@ class FJSP(Instance):
         self.process_rate_m_rj_dict = {m: {(r, j): 1 / self.time_mrj_dict[m][(r, j)] for (r, j) in self.kind_task_m_dict[m]} for m in self.machine_tuple}  # 机器加工流体速率
 
         # 初始化参数对象中的列表和字典
-        self.reset_parameter()
+        # self.reset_parameter()
         # 初始化各对象属性# 新订单到达后更新各字典对象
-        self.reset_object_add(self.order_dict[0])
-        # 初始化空闲机器列表和可选工序类型列表
-        self.machine_idle_list = self.idle_machine()  # 空闲机器编号列表
-        self.kind_task_available = self.kind_task_available()  # 可选工序类型编号列表
-        print("成功定义FJSP类")
-
-    def idle_machine(self):
-        """返回空闲机器列表"""
-        return [m for m in self.machine_tuple if self.machine_dict[m].state == 0]
-
-    def kind_task_available(self):
-        """返回可选加工工序列表"""
-        return [(r, j) for (r, j) in self.kind_task_tuple if len(self.kind_task_dict[(r, j)].job_now_list) > 0 and set(self.kind_task_dict[(r, j)].fluid_machine_list)&set(self.machine_idle_list)]
+        # self.reset_object_add(self.order_dict[0])
+        # print("成功定义FJSP类")
 
     def reset_parameter(self):
         """初始化各字典和参数"""
