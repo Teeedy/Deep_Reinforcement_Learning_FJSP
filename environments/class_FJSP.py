@@ -100,6 +100,8 @@ class Machine():
         self.state = 0  # 机器状态
         self.time_end = 0  # 机器完工时间
         self.task_list = []  # 机器已加工工序对象列表
+        self.task_object = None  # 机器正在处理的工序对象
+        self.job_object = None  # 机器正在处理的工件对象
         # 流体附加属性
         self.fluid_kind_task_list = []  # 可选加工工序类型
         self.time_ratio_rj_dict = {}  # 流体解中分配给各工序类型的时间比例
@@ -161,6 +163,8 @@ class FJSP(Instance):
             machine_object.machine_state = 0  # 机器状态
             machine_object.time_end = 0  # 机器完工时间
             machine_object.task_list = []  # 机器已加工工序对象列表
+            machine_object.task_object = None
+            machine_object.job_object = None
 
     def reset_fluid_parameter(self):
         """初始化流体属性参数"""

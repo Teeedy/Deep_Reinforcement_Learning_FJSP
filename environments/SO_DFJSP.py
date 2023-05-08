@@ -21,7 +21,7 @@ class SO_DFJSP_Environment(FJSP):
         self.reward = None  # 即时奖励
         self.done = False  # 是否为终止状态
         # 动作和观察的状态空间维度
-        self.action_space = [6, 6]  # 二维离散动作空间
+        self.action_space = [6, 4]  # 二维离散动作空间
         self.observation_space = 12  # 观察的状态向量空间
         self.reward_sum = 0  # 累计回报
         # 空闲机器列表和可选工序类型列表
@@ -32,6 +32,7 @@ class SO_DFJSP_Environment(FJSP):
         self.kind_task_delay_time_e = {}  # 工序类型的估计延期
         self.kind_task_due_date = {}  # 工序类型的最小交期
         # 回报计算相关属性
+        self.delay_time_sum_last = None  # 上一决策步的估计总延期时间
         self.delay_time_sum = None  # 剩余工件总的估计延期时间
         # 重置环境状态
         self.reset()
@@ -47,8 +48,10 @@ class SO_DFJSP_Environment(FJSP):
         # 初始化当前时间和时间步
         self.step_count = 0
         self.step_time = 0
-        # 初始化状态向量
+        # 初始化last时间步
         self.last_observation_state = self.state_extract()  # 上一步观察到的状态 v(t-1)
+        self.delay_time_sum_last = self.delay_time_sum  # 上一时间步的估计总延期时间
+        # 初始化初始时间步
         self.observation_state = self.state_extract()  # 当前时间步的状态 v(t)
         self.state_gap = np.array(self.observation_state) - np.array(self.last_observation_state)  # v(t) - v(t-1)
         self.state = np.concatenate((np.array(self.observation_state), self.state_gap))  # 状态向量 [v(t), v(t) - v(t-1)]
@@ -97,7 +100,7 @@ class SO_DFJSP_Environment(FJSP):
                 self.kind_task_delay_time_e[(r, j)] = None
                 self.kind_task_due_date[(r, j)] = None
             # 计算各延迟率
-            for job_index, job_object in enumerate(kind_task_object.job_unfinished_post_list):
+            for job_index, job_object in enumerate(kind_task_object.job_now_list):
                 job_number += 1  # 剩余工件总数
                 delay_job_task_number = 0  # 该工件的估计延迟工序数
                 time_end = 0  # 初始化该工件的估计完工时间
@@ -132,16 +135,25 @@ class SO_DFJSP_Environment(FJSP):
         return None
 
     def task_select(self, action):
-        """根据动作选择工序"""
+        """6个工序选择规则"""
+
         return None
 
     def machine_select(self, action):
-        """根据动作选择机器"""
+        """4个机器分配规则"""
+
         return None
 
-    def compute_reward(self, achieved_goal, desired_goal, info):
+    def compute_reward(self):
         """根据剩余工件估计延迟时间计算奖励"""
-        return None
+        delay_time_gap = self.delay_time_sum - self.delay_time_sum_last
+        if delay_time_gap < 0:
+            self.reward = 1
+        elif delay_time_gap == 0:
+            self.reward = 0
+        else:
+            self.reward = -1
+        return self.reward
 
     def idle_machine(self):
         """返回空闲机器列表"""
