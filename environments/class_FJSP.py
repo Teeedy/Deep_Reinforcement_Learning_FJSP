@@ -63,7 +63,7 @@ class Tasks(Kind):
     @property
     def due_date_min(self):
         """工序rj阶段工件的交期最小值"""
-        return self.job_now_list[0].due_data
+        return self.job_now_list[0].due_date
 
 class Job(Kind):
     """工件类"""
