@@ -54,7 +54,6 @@ class SO_DFJSP_Environment(FJSP):
     def state_extract(self):
         """
         提取状态向量
-        :return: 观察到的状态向量
         """
         # 计算向量元素
         M = self.machine_count  # 1机器数
@@ -69,6 +68,25 @@ class SO_DFJSP_Environment(FJSP):
         dro_a = []
 
         return [M, ct_m_std, cro_ave, cro_std, gap_ave, gap_std, gap_m_ave, gap_m_std]
+
+    def delay_rate(self):
+        """计算当前时间步：剩余工序实际延迟率和估计延迟率+剩余工件实际延迟率+估计延迟率"""
+        delay_task_number_a = 0  # 实际延迟工序总数
+        delay_task_number_e = 0  # 估计延迟工序总数
+        task_number = 0  # 工序总数
+        delay_job_number_a = 0  # 实际延迟工件总数
+        delay_job_number_e = 0  # 估计延迟工件总数
+        job_number = 0  # 剩余工件总数
+        # 计算各状态向量的元素
+        for r, kind_object in self.kind_dict.items():
+            for job_object in kind_object.job_unfinished_list:
+                job_number += 1
+                if job_object.due_date < self.step_time:
+                    delay_job_number_a += 1
+                for task_object in job_object.task_unfinished_list:
+                    task_number += 1
+                    if task_object.due_date < self.step_time:
+                        delay_task_number_a += 1
 
 
     def step(self, action):

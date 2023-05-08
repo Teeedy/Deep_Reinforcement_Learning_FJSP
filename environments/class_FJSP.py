@@ -25,8 +25,8 @@ class Kind():
         self.job_arrive_list = []  # 已经到达的工件对象列表
         self.job_unfinished_list = []  # 未加工完成的工件对象列表
     @property
-    def job_number(self):
-        """该类型工件已到达工件数"""
+    def number_start(self):
+        """该类型工件已到达工件数:下一阶段的工件n其实编号"""
         return len(self.job_arrive_list)
 
 class Tasks(Kind):
@@ -38,6 +38,7 @@ class Tasks(Kind):
         self.machine_tuple = None  # 可选加工机器编号
         # 附加属性
         self.job_now_list = []  # 处于该工序段的工件对象列表
+        self.job_unfinished_post_list = []  # j-1工序完成 但 j工序还未完工的工件列表
         self.job_unprocessed_list = []  # 该工序段未被加工的工件对象列表
         self.task_unprocessed_list = []  # 该工序段还未加工的工序对象列表
         self.task_processed_list = []  # 该工序段已加工的工序对象列表
@@ -72,7 +73,8 @@ class Job(Kind):
         self.number = n  # 该工件类型的第几个工件
         # 附加属性
         self.due_date = None  # 该工件的交期
-        self.task_list = []  # 已处理工序对象列表
+        self.task_list = []  # 已处理完成工序对象列表
+        self.task_unfinished_list = []  # 未处理完成工序对象列表
 
 class Task(Tasks, Job):
     """工序类"""
@@ -83,7 +85,10 @@ class Task(Tasks, Job):
         self.machine = None  # 选择的机器
         self.time_end = None  # 加工结束时间
         self.time_begin = None  # 加工开始时间
-        self.time_cost = None  # 加工用时
+    @property
+    def time_cost(self):
+        """加工耗时"""
+        return self.time_end - self.time_begin
 
 class Machine():
     """机器类"""
@@ -147,6 +152,7 @@ class FJSP(Instance):
         for (r, j), kind_task_object in self.kind_task_dict.items():
             kind_task_object.machine_tuple = self.machine_rj_dict[(r, j)]  # 可选加工机器编号元组
             kind_task_object.job_now_list = []  # 处于该工序段的工件对象列表
+            kind_task_object.job_unfinished_post_list = []  # <j+1
             kind_task_object.job_unprocessed_list = []  # 该工序段未被加工的工件对象列表
             kind_task_object.task_unprocessed_list = []  # 该工序段还未加工的工序对象列表
             kind_task_object.task_processed_list = []  # 该工序段已加工的工序对象列表
@@ -176,7 +182,7 @@ class FJSP(Instance):
         """
         # 更新工件类型字典、工序类型对象字典、工序对象字典、工件对象字典、
         for r in self.kind_tuple:
-            n_start = len(self.kind_dict[r].job_arrive_list)
+            n_start = self.kind_dict[r].number_start
             n_end = n_start + order_object.count_kind[r]
             for n in range(n_start, n_end):
                 job_object = Job(r, n)  # 工件对象
@@ -186,8 +192,10 @@ class FJSP(Instance):
                 self.kind_dict[r].job_unfinished_list.append(job_object)
                 self.job_dict[(r, n)] = job_object  # 加入工件字典
                 self.kind_task_dict[(r, 0)].job_now_list.append(job_object)
+                self.kind_task_dict[(r, 0)].job_unfinished_post_list.append(job_object)
                 for j in self.task_r_dict[r]:
                     task_object = Task(r, n, j)  # 工序对象
+                    job_object.task_unfinished_list.append(task_object)  # 加入工序未处理完成工序对象字典
                     task_object.due_date = self.job_dict[(r, n)].due_date  # 工序交期
                     self.kind_task_dict[(r, j)].job_unprocessed_list.append(job_object)
                     self.kind_task_dict[(r, j)].task_unprocessed_list.append(task_object)
