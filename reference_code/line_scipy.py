@@ -7,9 +7,9 @@ def fluid_model(self):
     """
     最大完工时间
     """
-    fluid_number = {(r, j): self.task_kind_dict[(r, j)].fluid_unprocessed_number_start for (r, j) in
+    fluid_number = {(r, j): self.kind_task_dict[(r, j)].fluid_unprocessed_number_start for (r, j) in
                     self.kind_task_tuple}
-    fluid_number_time = {(r, j): self.task_kind_dict[(r, j)].fluid_number for (r, j) in self.kind_task_tuple}
+    fluid_number_time = {(r, j): self.kind_task_dict[(r, j)].fluid_number for (r, j) in self.kind_task_tuple}
     task_end_r_dict = {r: self.task_r_dict[r][-1] for r in self.kind_tuple}
     mrj_tuple = tuple((m, (r, j)) for m in self.machine_tuple for (r, j) in self.kind_task_m_dict[m])
     x_mrj_dict = {(m, (r, j)): mrj_tuple.index((m, (r, j))) for m in self.machine_tuple for (r, j) in
@@ -41,12 +41,12 @@ def objective(self, x):
     mrj_x_dict = {mrj_tuple.index((m, (r, j))): (m, (r, j)) for m in self.machine_tuple for (r, j) in
                   self.kind_task_m_dict[m]}
     # 初始化参数
-    fluid_number = {(r, j): self.task_kind_dict[(r, j)].fluid_unprocessed_number_start for (r, j) in
+    fluid_number = {(r, j): self.kind_task_dict[(r, j)].fluid_unprocessed_number_start for (r, j) in
                     self.kind_task_tuple}
-    fluid_number_time = {(r, j): self.task_kind_dict[(r, j)].fluid_number for (r, j) in self.kind_task_tuple}
+    fluid_number_time = {(r, j): self.kind_task_dict[(r, j)].fluid_number for (r, j) in self.kind_task_tuple}
     task_end_rj_dict = {(r, self.task_r_dict[r][-1]) for r in self.kind_tuple}
     fluid_due_date_dict = {
-        (r, j): [task_object.due_date for task_object in self.task_kind_dict[(r, j)].task_unprocessed_list] for (r, j)
+        (r, j): [task_object.due_date for task_object in self.kind_task_dict[(r, j)].task_unprocessed_list] for (r, j)
         in task_end_rj_dict}
     # 计算各类的完工时间
     process_rate_sum = {(r, j): sum(

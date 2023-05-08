@@ -169,7 +169,7 @@ class FJSP(Instance):
             machine_object.unprocessed_rj_dict = {}  # 未被m加工的工序o_rj的总数 (r,j)
             # 流体附加属性
             machine_object.fluid_kind_task_list = []  # 流体解中可选加工工序类型列表
-            machine_object.time_rate_rj_dict = {}  # 流体解中分配给各工序类型的时间比例
+            machine_object.time_ratio_rj_dict = {}  # 流体解中分配给各工序类型的时间比例
             machine_object.fluid_process_rate_rj_dict = {}  # 流体解中加工各工序类型的速率
             machine_object.gap_rj_dict = {}  # 流体gap_mrj值 rj
             machine_object.fluid_unprocessed_rj_dict = {}  # 流体解中未被机器m加工的各工序类型总数
