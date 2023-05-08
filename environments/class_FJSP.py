@@ -147,8 +147,8 @@ class FJSP(Instance):
         # 初始化各对象属性# 新订单到达后更新各字典对象
         self.reset_object_add(self.order_dict[0])
         # 初始化空闲机器列表和可选工序类型列表
-        self.machine_idle_list = self.idle_machine()  # 空闲机器编号列表
-        self.kind_task_list = self.kind_task_available()  # 可选工序类型编号列表
+        self.machine_idle = self.idle_machine()  # 空闲机器编号列表
+        self.kind_task_available = self.kind_task_available()  # 可选工序类型编号列表
         print("成功定义FJSP类")
 
     def idle_machine(self):
@@ -222,6 +222,7 @@ class FJSP(Instance):
         # 初始化流体属性
         self.reset_fluid_parameter()
         # 基于流体解更新流体属性
+        self.update_fluid_parameter(x)
 
 
     def fluid_model(self):
@@ -260,7 +261,7 @@ class FJSP(Instance):
         for (m, (r, j)), rate in x.items():
             if rate != 0:
                 machine_object = self.machine_dict[m]
-                kind_task_object = self.kind_task_dict[m]
+                kind_task_object = self.kind_task_dict[(r, j)]
                 machine_object.fluid_kind_task_list.append((r, j))
                 kind_task_object.fluid_machine_list.append(m)
                 machine_object.time_ratio_rj_dict[(r, j)] = rate  # 流体解中分配给各工序类型的时间比例
