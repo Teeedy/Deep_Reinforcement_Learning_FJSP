@@ -85,7 +85,7 @@ class Task(Tasks, Job):
         self.machine = None  # 选择的机器
         self.time_end = None  # 加工结束时间
         self.time_begin = None  # 加工开始时间
-        self.time_cost = None  # 加工时间
+        self.time_cost = None  # 加工用时
 
 class Machine():
     """机器类"""
@@ -94,14 +94,13 @@ class Machine():
         self.machine_node = m  # 机器编号
         self.kind_task_tuple = None  # 可选加工工序类型元组
         # 附加属性
-        self.machine_state = 0  # 机器状态
+        self.state = 0  # 机器状态
         self.time_end = 0  # 机器完工时间
         self.task_list = []  # 机器已加工工序对象列表
         # 流体附加属性
         self.fluid_kind_task_list = []  # 可选加工工序类型
         self.time_ratio_rj_dict = {}  # 流体解中分配给各工序类型的时间比例
         self.fluid_process_rate_rj_dict = {}  # 流体解中加工各工序类型的速率
-        self.gap_rj_dict = {}  # 流体gap_mrj值 rj
         self.unprocessed_rj_dict = {}  # 未被m加工的各工序类型的工序总数/随着加工过程动态更新
         self.fluid_unprocessed_rj_dict = {}  # 未被机器m加工的各工序类型流体总数
         self.fluid_unprocessed_rj_arrival_dict = {}  # 订单到达时刻未被m加工的各工序类型流体数
@@ -109,6 +108,13 @@ class Machine():
     def utilize_rate(self, step_time):
         """利用率"""
         return sum([task.time_cost for task in self.task_list])/max(step_time, self.time_end)
+    @property
+    def gap_rj_dict(self):
+        """计算gap_mrj值"""
+        gap_rj_dict = {}
+        for (r, j) in self.fluid_kind_task_list:
+            gap_rj_dict[(r, j)] = (self.unprocessed_rj_dict[(r, j)] - self.fluid_unprocessed_rj_dict[(r, j)])/self.fluid_unprocessed_rj_arrival_dict[(r, j)]
+        return gap_rj_dict
 
 # 问题实例类
 class FJSP(Instance):
@@ -141,8 +147,17 @@ class FJSP(Instance):
         # 初始化各对象属性# 新订单到达后更新各字典对象
         self.reset_object_add(self.order_dict[0])
         # 初始化空闲机器列表和可选工序类型列表
-        self.machine_idle = []  # 空闲机器编号列表
-        self.kind_task_list = []  # 可选工序类型编号列表
+        self.machine_idle_list = self.idle_machine()  # 空闲机器编号列表
+        self.kind_task_list = self.kind_task_available()  # 可选工序类型编号列表
+        print("成功定义FJSP类")
+
+    def idle_machine(self):
+        """返回空闲机器列表"""
+        return [m for m in self.machine_tuple if self.machine_dict[m].state == 0]
+
+    def kind_task_available(self):
+        """返回可选加工工序列表"""
+        return [(r, j) for (r, j) in self.kind_task_tuple if len(self.kind_task_dict[(r, j)].job_now_list) > 0 and set(self.kind_task_dict[(r, j)].fluid_machine_list)&set(self.machine_idle_list)]
 
     def reset_parameter(self):
         """初始化各字典和参数"""
@@ -170,7 +185,6 @@ class FJSP(Instance):
             machine_object.fluid_kind_task_list = []  # 流体解中可选加工工序类型列表
             machine_object.time_ratio_rj_dict = {}  # 流体解中分配给各工序类型的时间比例
             machine_object.fluid_process_rate_rj_dict = {}  # 流体解中加工各工序类型的速率
-            machine_object.gap_rj_dict = {}  # 流体gap_mrj值 rj
             machine_object.unprocessed_rj_dict = {}  # 未被m加工的工序o_rj的总数 (r,j)
             machine_object.fluid_unprocessed_rj_dict = {}  # 流体解中未被机器m加工的各工序类型总数
             machine_object.fluid_unprocessed_rj_arrival_dict = {}  # 订单到达时刻未被m加工的各工序类型数量
@@ -257,12 +271,13 @@ class FJSP(Instance):
             kind_task_object.fluid_time_sum = 1/kind_task_object.fluid_rate_sum
         for m, machine_object in self.machine_dict.items():
             for (r, j) in machine_object.fluid_kind_task_list:
-
-                machine_object.gap_rj_dict = {}  # 流体gap_mrj值 rj
-                machine_object.unprocessed_rj_dict = {}  # 未被m加工的工序o_rj的总数 (r,j)
-                machine_object.fluid_unprocessed_rj_dict = {}  # 流体解中未被机器m加工的各工序类型总数
-                machine_object.fluid_unprocessed_rj_arrival_dict = {}  # 订单到达时刻未被m加工的各工序类型数量
-
+                kind_task_object = self.kind_task_dict[(r, j)]
+                # 订单到达时刻未被m加工的各工序类型数量
+                machine_object.fluid_unprocessed_rj_arrival_dict[(r, j)] = kind_task_object.fluid_unprocessed_number_start*machine_object.fluid_process_rate_rj_dict[(r, j)]/kind_task_object.fluid_rate_sum
+                # 未被m加工的工序o_rj的总数 (r,j)
+                machine_object.unprocessed_rj_dict[(r, j)] = machine_object.fluid_unprocessed_rj_arrival_dict[(r, j)]
+                # 流体解中未被机器m加工的各工序类型总数
+                machine_object.fluid_unprocessed_rj_dict[(r, j)] = machine_object.fluid_unprocessed_rj_arrival_dict[(r, j)]
 # 测试环境
 if __name__ == '__main__':
     DDT = 1.0
