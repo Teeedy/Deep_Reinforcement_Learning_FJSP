@@ -42,25 +42,33 @@ class SO_DFJSP_Environment(FJSP):
         self.step_count = 0
         self.step_time = 0
         # 初始化状态向量
-        self.last_observation_state = []  # 上一步观察到的状态
-        self.observation_state = []  # 当前时间步的状态
-        self.state_gap = np.array(self.observation_state) - np.array(self.observation_state)
-        self.state = np.concatenate((np.array(self.observation_state), self.state_gap), axis=1)  # 状态向量
+        self.last_observation_state = self.state_extract()  # 上一步观察到的状态 v(t-1)
+        self.observation_state = self.state_extract()  # 当前时间步的状态 v(t)
+        self.state_gap = np.array(self.observation_state) - np.array(self.last_observation_state)  # v(t) - v(t-1)
+        self.state = np.concatenate((np.array(self.observation_state), self.state_gap), axis=1)  # 状态向量 [v(t), v(t) - v(t-1)]
         self.next_state = None  # 下一步状态
         self.reward = None  # 即时奖励
         self.done = False  # 是否为终止状态
         return self.state
 
-    def observation_state(self):
+    def state_extract(self):
         """
         提取状态向量
         :return: 观察到的状态向量
         """
-        # 初始化状态向量列表
-        state_list = []
-        # 添加向量元素
-        state_list.append(self.machine_count)  # 机器数
-        CT_M_std = math.sqrt(sum(math.pow())/self.machine_count)
+        # 计算向量元素
+        M = self.machine_count  # 1机器数
+        ct_m_ave = sum(machine_object.time_end for m, machine_object in self.machine_dict.items())/self.machine_count
+        ct_m_std = math.sqrt(sum(math.pow(machine_object.time_end - ct_m_ave, 2) for m, machine_object in self.machine_dict.items())/self.machine_count)   # 2机器完工时间标准差
+        cro_ave = sum(kind_task_object.finish_rate for (r, j), kind_task_object in self.kind_task_dict.items())/len(self.kind_task_tuple)  # 3工序类型完工率均值
+        cro_std = math.sqrt(sum(math.pow(kind_task_object.finish_rate - cro_ave, 2) for (r, j), kind_task_object in self.kind_task_dict.items())/len(self.kind_task_tuple))  # 4工序类型完工率标准差
+        gap_ave = sum(kind_task_object.gap for (r, j), kind_task_object in self.kind_task_dict.items())/len(self.kind_task_tuple)  # 5工序类型gap_rj均值
+        gap_std = math.sqrt(sum(math.pow(kind_task_object.gap - gap_ave, 2) for (r, j), kind_task_object in self.kind_task_dict.items())/len(self.kind_task_tuple))  # 6工序类型gap_rj标准差
+        gap_m_ave = sum(machine_object.gap_ave for m, machine_object in self.machine_dict.items())/self.machine_count  # 机器gap_m均值
+        gap_m_std = math.sqrt(sum(math.pow(machine_object.gap_ave - gap_m_ave, 2) for m, machine_object in self.machine_dict.items())/self.machine_count)  # 机器gap_m标准差
+        dro_a = []
+
+        return [M, ct_m_std, cro_ave, cro_std, gap_ave, gap_std, gap_m_ave, gap_m_std]
 
 
     def step(self, action):

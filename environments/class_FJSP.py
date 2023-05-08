@@ -61,10 +61,8 @@ class Tasks(Kind):
         return len(self.task_processed_list)/(len(self.task_unprocessed_list) + len(self.task_processed_list))
     @property
     def due_date_min(self):
+        """工序rj阶段工件的交期最小值"""
         return self.job_now_list[0].due_data
-    @property
-    def due_date_ave(self):
-        return sum([job.due_data for job in self.job_unprocessed_list])/len(self.job_unprocessed_list)
 
 class Job(Kind):
     """工件类"""
@@ -115,6 +113,10 @@ class Machine():
         for (r, j) in self.fluid_kind_task_list:
             gap_rj_dict[(r, j)] = (self.unprocessed_rj_dict[(r, j)] - self.fluid_unprocessed_rj_dict[(r, j)])/self.fluid_unprocessed_rj_arrival_dict[(r, j)]
         return gap_rj_dict
+    @property
+    def gap_ave(self):
+        """计算gap_m_rj的均值"""
+        return sum(self.gap_rj_dict[(r, j)] for (r, j) in self.fluid_kind_task_list)/len(self.fluid_kind_task_list)
 
 # 问题实例类
 class FJSP(Instance):
