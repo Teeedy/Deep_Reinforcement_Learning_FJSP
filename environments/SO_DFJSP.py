@@ -13,6 +13,7 @@ class SO_DFJSP_Environment(FJSP):
         # 封装基本属性
         self.step_count = 0  # 决策步
         self.step_time = 0  # 时间点
+        self.order_arrive_time = 0  # 顶顶那到达时间点
         self.last_observation_state = None  # 上一步观察到的状态 v(t-1)
         self.observation_state = None  # 当前时间步的状态 v(t)
         self.state_gap = None  # v(t) - v(t-1)
@@ -188,17 +189,19 @@ class SO_DFJSP_Environment(FJSP):
             kind_object_selected.job_unprocessed_list.remove(job_object_selected)
         # 判断是否移动时钟
         if len(self.kind_task_available_list) == 0:
-            machine_next = min([self.machine_dict[m].time_end for m in self.machine_tuple
+            # 更新当前时间点
+            self.step_time = min([self.machine_dict[m].time_end for m in self.machine_tuple
                                   if self.machine_dict[m].time_end > self.step_time])
-            job_next = 0
             # 判断新订单是否到达
             if len(self.order_object_list) > 0 and self.order_object_list[0].time_arrive <= self.step_time:
                 order_object = self.order_object_list[0]
                 self.order_object_list.remove(order_object)
                 self.reset_object_add(order_object)
+                self.order_arrive_time = order_object.time_arrive
             else:
-                # 更新相关属性
+                # 更新对象相关属性: 机器状态、工序类型阶段的工件对象列表
                 a = 0
+                # 更新流体相关属性：工序类型流体量、机器-工序类型流体量
 
         self.state = self.next_state
         return None
