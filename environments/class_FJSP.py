@@ -163,7 +163,6 @@ class FJSP(Instance):
             machine_object.machine_state = 0  # 机器状态
             machine_object.time_end = 0  # 机器完工时间
             machine_object.task_list = []  # 机器已加工工序对象列表
-            machine_object.task_object = None
             machine_object.job_object = None
 
     def reset_fluid_parameter(self):

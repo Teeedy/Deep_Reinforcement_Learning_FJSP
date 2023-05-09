@@ -42,11 +42,12 @@ class SO_DFJSP_Environment(FJSP):
         """重置环境状态"""
         # 初始化FJSP类
         self.reset_parameter()  # 初始化参数对象中的列表和字典
-        self.reset_object_add(self.order_dict[0])  # 新订单到达后更新各字典对象
-        self.order_object_list.remove(self.order_dict[0])  # 更新未到达订单对象列表
+        self.reset_object_add(self.order_object_list[0])  # 新订单到达后更新各字典对象
+        self.order_object_list.remove(self.order_object_list[0])  # 更新未到达订单对象列表
         # 初始化当前时间和时间步
         self.step_count = 0
         self.step_time = 0
+        self.reward_sum = 0  # 累计回报
         # 初始化last时间步
         self.last_observation_state = self.state_extract()  # 上一步观察到的状态 v(t-1)
         self.delay_time_sum_last = self.delay_time_sum  # 上一时间步的估计总延期时间
@@ -192,19 +193,57 @@ class SO_DFJSP_Environment(FJSP):
             # 更新当前时间点
             self.step_time = min([self.machine_dict[m].time_end for m in self.machine_tuple
                                   if self.machine_dict[m].time_end > self.step_time])
+            # 更新对象相关属性: 机器状态、工序类型阶段的工件对象列表
+            for m, machine_object in self.machine_dict.items():
+                if machine_object.time_end == self.step_time:
+                    machine_object.state = 0  # 更新机器状态
+                    job_object = machine_object.job_object  # 刚加工完的工件对象
+                    if len(job_object.task_unprocessed_list) > 0:
+                        task_object = job_object.task_unprocessed_list[0]  # 新到达的工序对象
+                        kind_task_object = self.kind_task_dict[(task_object.kind, task_object.task)]  # 对应的工序类型
+                        kind_task_object.job_now_list.append(job_object)
+                        kind_task_object.task_now_list.append(task_object)
+                    machine_object.job_object = None  # 更新该机器正在加工的工件对象
             # 判断新订单是否到达
             if len(self.order_object_list) > 0 and self.order_object_list[0].time_arrive <= self.step_time:
                 order_object = self.order_object_list[0]
                 self.order_object_list.remove(order_object)
                 self.reset_object_add(order_object)
                 self.order_arrive_time = order_object.time_arrive
-            else:
-                # 更新对象相关属性: 机器状态、工序类型阶段的工件对象列表
-                a = 0
-                # 更新流体相关属性：工序类型流体量、机器-工序类型流体量
-
+            # 直接移动到下一个新订单到达点
+            elif len(self.order_object_list) > 0 and sum(len(kind_object.job_unprocessed_list) for r, kind_object in self.kind_dict.items()) == 0:
+                order_object = self.order_object_list[0]
+                self.order_object_list.remove(order_object)
+                self.reset_object_add(order_object)
+                self.order_arrive_time = order_object.time_arrive
+                self.step_time = self.order_arrive_time  # 时钟移动到新订单到达时间点
+            # 更新流体相关属性：工序类型流体量、机器-工序类型流体量
+            gap_time = self.step_time - self.order_arrive_time  # 流动时间
+            for (r, j), kind_task_object in self.kind_task_dict.items():
+                kind_task_object.fluid_unprocessed_number = kind_task_object.fluid_unprocessed_number_start - \
+                                                            kind_task_object.fluid_rate_sum*gap_time
+            for m, machine_object in self.machine_dict.items():
+                for (r, j) in machine_object.fluid_kind_task_list:
+                    machine_object.fluid_unprocessed_rj_dict[(r, j)] = \
+                        machine_object.fluid_unprocessed_rj_arrival_dict[(r, j)] - \
+                        gap_time*machine_object.fluid_process_rate_rj_dict[(r, j)]
+        # 提取新的状态、计算回报值、判断周期循环是否结束
+        self.step_count += 1
+        self.last_observation_state = self.observation_state  # 上一步观察到的状态 v(t-1)
+        self.delay_time_sum_last = self.delay_time_sum  # 上一时间步的估计总延期时间
+        # 初始化初始时间步
+        self.observation_state = self.state_extract()  # 当前时间步的状态 v(t)
+        self.state_gap = np.array(self.observation_state) - np.array(self.last_observation_state)  # v(t) - v(t-1)
+        self.next_state = np.concatenate((np.array(self.observation_state), self.state_gap))  # 状态向量 [v(t), v(t) - v(t-1)]
+        self.reward = self.compute_reward()  # 即时奖励
+        self.reward_sum += self.reward  # 更新累计回报
+        # 判断是否为终止状态
+        if len(self.order_object_list) == 0 and sum(len(kind_object.job_unprocessed_list) for r, kind_object in self.kind_dict.items()) == 0:
+            self.done = True
+        else:
+            self.done = False
         self.state = self.next_state
-        return None
+        return self.state, self.reward, self.done
 
     def task_select(self, task_rule):
         """6个工序选择规则"""
@@ -254,16 +293,16 @@ class SO_DFJSP_Environment(FJSP):
 
     def machine_select(self, machine_rule, rj_selected):
         """4个机器分配规则"""
-        machine_selectable_list = list(set(self.machine_idle_list)&set(self.machine_rj_dict[rj_selected]))  # 可选机器列表
+        machine_selectable_list = list(set(self.machine_idle_list)&set(self.kind_task_dict[rj_selected].fluid_machine_list))  # 可选机器列表
         # 机器分配规则1
         if machine_rule == 1:
-            m = max(machine_selectable_list, key=lambda x: self.machine_dict[m].gap_rj_dict[rj_selected])
+            m = max(machine_selectable_list, key=lambda x: self.machine_dict[x].gap_rj_dict[rj_selected])
         # 机器分配规则2
         elif machine_rule == 2:
-            m = min(machine_selectable_list, key=lambda x: self.time_mrj_dict[m][rj_selected])
+            m = min(machine_selectable_list, key=lambda x: self.time_mrj_dict[x][rj_selected])
         # 机器分配规则3
         elif machine_rule == 3:
-            m = max(machine_selectable_list, key=lambda x: self.machine_dict[m].gap_ave)
+            m = max(machine_selectable_list, key=lambda x: self.machine_dict[x].gap_ave)
         # 机器分配规则4
         elif machine_rule == 4:
             m = random.choice(machine_selectable_list)
@@ -299,4 +338,12 @@ if __name__ == '__main__':
     M = 15
     S = 4
     env_object = SO_DFJSP_Environment(DDT, M, S)  # 定义环境对象
+    state = env_object.reset()  # 初始化状态
+    replay_list = []
     # 随机选择动作测试环境
+    while not env_object.done:
+        action = (random.choice([1, 2, 3, 4, 5, 6]), random.choice([1, 2, 3, 4]))  # action = policy_network(state)
+        next_state, reward, done = env_object.step(action)
+        replay_list.append([state, action, next_state, reward, done])
+        state = next_state
+    print("累计回报:", env_object.reward_sum)
