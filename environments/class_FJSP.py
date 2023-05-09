@@ -23,7 +23,7 @@ class Kind():
     def __init__(self, r):
         self.kind = r
         self.job_arrive_list = []  # 已经到达的工件对象列表
-        self.job_unfinished_list = []  # 未加工完成的工件对象列表
+        self.job_unfinished_list = []  # 未分配机器的工件对象列表
     @property
     def number_start(self):
         """该类型工件已到达工件数:下一阶段的工件n其实编号"""
@@ -73,8 +73,8 @@ class Job(Kind):
         self.number = n  # 该工件类型的第几个工件
         # 附加属性
         self.due_date = None  # 该工件的交期
-        self.task_list = []  # 已处理完成工序对象列表
-        self.task_unfinished_list = []  # 未处理完成工序对象列表
+        self.task_list = []  # 分配机器的工序对象列表
+        self.task_unfinished_list = []  # 未分配机器的工序对象列表
 
 class Task(Tasks, Job):
     """工序类"""
@@ -100,7 +100,6 @@ class Machine():
         self.state = 0  # 机器状态
         self.time_end = 0  # 机器完工时间
         self.task_list = []  # 机器已加工工序对象列表
-        self.task_object = None  # 机器正在处理的工序对象
         self.job_object = None  # 机器正在处理的工件对象
         # 流体附加属性
         self.fluid_kind_task_list = []  # 可选加工工序类型
