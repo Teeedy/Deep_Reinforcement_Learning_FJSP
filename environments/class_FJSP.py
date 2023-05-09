@@ -23,7 +23,7 @@ class Kind():
     def __init__(self, r):
         self.kind = r
         self.job_arrive_list = []  # 已经到达的工件对象列表
-        self.job_unfinished_list = []  # 未分配机器的工件对象列表
+        self.job_unprocessed_list = []  # 未加工完成的工件对象列表
     @property
     def number_start(self):
         """该类型工件已到达工件数:下一阶段的工件n其实编号"""
@@ -38,7 +38,7 @@ class Tasks(Kind):
         self.machine_tuple = None  # 可选加工机器编号
         # 附加属性
         self.job_now_list = []  # 处于该工序段的工件对象列表
-        self.job_unfinished_post_list = []  # j-1工序完成 但 j工序还未完工的工件列表
+        self.task_now_list = []  # 处于该工序段的工序对象列表
         self.job_unprocessed_list = []  # 该工序段未被加工的工件对象列表
         self.task_unprocessed_list = []  # 该工序段还未加工的工序对象列表
         self.task_processed_list = []  # 该工序段已加工的工序对象列表
@@ -74,7 +74,7 @@ class Job(Kind):
         # 附加属性
         self.due_date = None  # 该工件的交期
         self.task_list = []  # 分配机器的工序对象列表
-        self.task_unfinished_list = []  # 未分配机器的工序对象列表
+        self.task_unprocessed_list = []  # 未分配机器的工序对象列表
 
 class Task(Tasks, Job):
     """工序类"""
@@ -101,11 +101,11 @@ class Machine():
         self.time_end = 0  # 机器完工时间
         self.task_list = []  # 机器已加工工序对象列表
         self.job_object = None  # 机器正在处理的工件对象
+        self.unprocessed_rj_dict = {}  # 未被m加工的各工序类型的工序总数/随着加工过程动态更新
         # 流体附加属性
         self.fluid_kind_task_list = []  # 可选加工工序类型
         self.time_ratio_rj_dict = {}  # 流体解中分配给各工序类型的时间比例
         self.fluid_process_rate_rj_dict = {}  # 流体解中加工各工序类型的速率
-        self.unprocessed_rj_dict = {}  # 未被m加工的各工序类型的工序总数/随着加工过程动态更新
         self.fluid_unprocessed_rj_dict = {}  # 未被机器m加工的各工序类型流体总数
         self.fluid_unprocessed_rj_arrival_dict = {}  # 订单到达时刻未被m加工的各工序类型流体数
 
@@ -133,6 +133,7 @@ class FJSP(Instance):
         self.kind_task_dict = {(r, j): Tasks(r, j) for r in self.kind_tuple for j in self.task_r_dict[r]}  # 工序类型对象字典
         self.order_dict = {s: Order(s, self.time_arrive_s_dict[s], self.time_delivery_s_dict[s], self.count_sr_dict[s])
                            for s in self.order_tuple}  # 对象订单字典
+        self.order_object_list = [self.order_dict[s] for s in self.order_tuple]  # 未到达订单对象列表
         self.kind_dict = {r: Kind(r) for r in self.kind_tuple}  # 工件类型对象字典
         self.machine_dict = {m: Machine(m) for m in self.machine_tuple}  # 机器对象字典
         self.task_dict = {}  # (r,n,j) 工序对象字典 订单到达更新
@@ -149,11 +150,11 @@ class FJSP(Instance):
         """初始化各字典和参数"""
         for r, kind in self.kind_dict.items():
             kind.job_arrive_list = []  # 已经到达的工件对象列表
-            kind.job_unfinished_list = []  # 未加工完成的工件对象列表
+            kind.job_unprocessed_list = []  # 未分配机器的工件对象列表
         for (r, j), kind_task_object in self.kind_task_dict.items():
             kind_task_object.machine_tuple = self.machine_rj_dict[(r, j)]  # 可选加工机器编号元组
             kind_task_object.job_now_list = []  # 处于该工序段的工件对象列表
-            kind_task_object.job_unfinished_post_list = []  # <j+1
+            kind_task_object.task_now_list = []  # 处于该工序段的工序对象列表
             kind_task_object.job_unprocessed_list = []  # 该工序段未被加工的工件对象列表
             kind_task_object.task_unprocessed_list = []  # 该工序段还未加工的工序对象列表
             kind_task_object.task_processed_list = []  # 该工序段已加工的工序对象列表
@@ -191,18 +192,20 @@ class FJSP(Instance):
                 job_object = Job(r, n)  # 工件对象
                 job_object.due_date = order_object.time_delivery  # 工件交期
                 job_object.task_list = []
+                job_object.task_unprocessed_list = []
                 self.kind_dict[r].job_arrive_list.append(job_object)
-                self.kind_dict[r].job_unfinished_list.append(job_object)
+                self.kind_dict[r].job_unprocessed_list.append(job_object)
                 self.job_dict[(r, n)] = job_object  # 加入工件字典
                 self.kind_task_dict[(r, 0)].job_now_list.append(job_object)
-                self.kind_task_dict[(r, 0)].job_unfinished_post_list.append(job_object)
                 for j in self.task_r_dict[r]:
                     task_object = Task(r, n, j)  # 工序对象
-                    job_object.task_unfinished_list.append(task_object)  # 加入工序未处理完成工序对象字典
+                    job_object.task_unprocessed_list.append(task_object)  # 加入工序未处理工序对象字典
                     task_object.due_date = self.job_dict[(r, n)].due_date  # 工序交期
                     self.kind_task_dict[(r, j)].job_unprocessed_list.append(job_object)
                     self.kind_task_dict[(r, j)].task_unprocessed_list.append(task_object)
                     self.task_dict[(r, n, j)] = task_object  # 加入工序字典
+                    if j == 0:  # 若为初始工序
+                        self.kind_task_dict[(r, 0)].task_now_list.append(task_object)  # 添加处于该工序的工序对象
         # 初始化流体属性
         for (r, j), task_kind_object in self.kind_task_dict.items():
             task_kind_object.fluid_number = len(task_kind_object.job_now_list)  # 处于该工序段的流体数量

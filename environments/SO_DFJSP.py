@@ -24,9 +24,6 @@ class SO_DFJSP_Environment(FJSP):
         self.action_space = [6, 4]  # 二维离散动作空间
         self.observation_space = 12  # 观察的状态向量空间
         self.reward_sum = 0  # 累计回报
-        # 空闲机器列表和可选工序类型列表
-        self.machine_idle_list = []  # 空闲机器编号列表
-        self.kind_task_available_list = []  # 可选工序类型编号列表
         # 工序和机器选择规则相关属性
         self.kind_task_delay_e_list = []  # 估计延期工序类型列表
         self.kind_task_delay_a_list = []  # 实际延期工序类型列表
@@ -45,8 +42,7 @@ class SO_DFJSP_Environment(FJSP):
         # 初始化FJSP类
         self.reset_parameter()  # 初始化参数对象中的列表和字典
         self.reset_object_add(self.order_dict[0])  # 新订单到达后更新各字典对象
-        self.machine_idle_list = self.idle_machine()  # 空闲机器编号列表
-        self.kind_task_available_list = self.kind_task_available()  # 可选工序类型编号列表
+        self.order_object_list.remove(self.order_dict[0])  # 更新未到达订单对象列表
         # 初始化当前时间和时间步
         self.step_count = 0
         self.step_time = 0
@@ -117,7 +113,7 @@ class SO_DFJSP_Environment(FJSP):
                 if job_object.due_date < self.step_time:
                     delay_job_number_a += 1  # 实际延迟工件数
                 task_time_start = self.step_time + job_index * kind_task_object.fluid_time_sum  # 初始化工件在该工序段开工时间
-                for task_object in job_object.task_unfinished_list:
+                for task_object in job_object.task_unprocessed_list:
                     task_number += 1  # 剩余工序总数
                     if task_object.due_date < self.step_time:
                         delay_task_number_a += 1  # 实际延迟工序数
@@ -132,13 +128,13 @@ class SO_DFJSP_Environment(FJSP):
         # 根据各机器上正在加工的工件对象再次更新对应参数
         for m, machine_object in self.machine_dict.items():
             job_object = machine_object.job_object
-            if job_object is not None and len(job_object.task_unfinished_list) > 0:
+            if job_object is not None and len(job_object.task_unprocessed_list) > 0:
                 job_number += 1  # 更新未完工工件总数
                 job_delay_time = 0  # 初始化该工件的估计延迟时间
                 if job_object.due_date < self.step_time:
                     delay_job_number_a += 1  # 更新实际延迟工件数
                 task_time_start = job_object.task_list[-1].time_end  # 初始化未分配机器工序开工时间
-                for task_object in job_object.task_unfinished_list:
+                for task_object in job_object.task_unprocessed_list:
                     task_number += 1  # 更新未完工工序总数
                     if task_object.due_date < self.step_time:
                         delay_task_number_a += 1  # 剩余工序实际延迟工序数
@@ -162,11 +158,47 @@ class SO_DFJSP_Environment(FJSP):
         machine_rule = action[1]  # 机器选择规则
         rj_selected = self.task_select(task_rule)  # 选择的工序类型
         m_selected = self.machine_select(machine_rule, rj_selected)  # 选择的机器
-        # 更新对应的各对象字典
-
+        # 定义相关对象
+        task_object_selected = self.kind_task_dict[rj_selected].task_now_list[0]  # 工序对象
+        job_object_selected = self.kind_task_dict[rj_selected].job_now_list[0]  # 工件对象
+        kind_task_object_selected = self.kind_task_dict[rj_selected]  # 工序类型对象
+        kind_object_selected = self.kind_dict[rj_selected[0]]  # 工件类型对象
+        machine_object_selected = self.machine_dict[m_selected]  # 机器对象
+        # 更新工序对象属性
+        task_object_selected.time_begin = self.step_time
+        task_object_selected.machine = m_selected
+        task_object_selected.time_end = self.step_time + self.time_mrj_dict[m_selected][rj_selected]
+        # 更新工件对象属性
+        job_object_selected.task_list.append(task_object_selected)
+        job_object_selected.task_unprocessed_list.remove(task_object_selected)
+        # 更新工序类型对象
+        kind_task_object_selected.job_now_list.remove(job_object_selected)
+        kind_task_object_selected.task_now_list.remove(task_object_selected)
+        kind_task_object_selected.job_unprocessed_list.remove(job_object_selected)
+        kind_task_object_selected.task_unprocessed_list.remove(task_object_selected)
+        kind_task_object_selected.task_processed_list.append(task_object_selected)
+        # 更新机器对象
+        machine_object_selected.state = 1
+        machine_object_selected.time_end = task_object_selected.time_end
+        machine_object_selected.task_list.append(task_object_selected)
+        machine_object_selected.job_object = job_object_selected
+        machine_object_selected.unprocessed_rj_dict[rj_selected] -= 1
+        # 更新工件类型对象
+        if len(job_object_selected.task_unprocessed_list) == 0:
+            kind_object_selected.job_unprocessed_list.remove(job_object_selected)
         # 判断是否移动时钟
-
-        # 判断新订单是否到达
+        if len(self.kind_task_available_list) == 0:
+            machine_next = min([self.machine_dict[m].time_end for m in self.machine_tuple
+                                  if self.machine_dict[m].time_end > self.step_time])
+            job_next = 0
+            # 判断新订单是否到达
+            if len(self.order_object_list) > 0 and self.order_object_list[0].time_arrive <= self.step_time:
+                order_object = self.order_object_list[0]
+                self.order_object_list.remove(order_object)
+                self.reset_object_add(order_object)
+            else:
+                # 更新相关属性
+                a = 0
 
         self.state = self.next_state
         return None
@@ -248,11 +280,12 @@ class SO_DFJSP_Environment(FJSP):
             self.reward = -1
         return self.reward
 
-    def idle_machine(self):
+    @property
+    def machine_idle_list(self):
         """返回空闲机器列表"""
         return [m for m in self.machine_tuple if self.machine_dict[m].state == 0]
-
-    def kind_task_available(self):
+    @property
+    def kind_task_available_list(self):
         """返回可选加工工序列表"""
         return [(r, j) for (r, j) in self.kind_task_tuple if len(self.kind_task_dict[(r, j)].job_now_list) > 0 and
                 set(self.kind_task_dict[(r, j)].fluid_machine_list) & set(self.machine_idle_list)]
@@ -262,4 +295,5 @@ if __name__ == '__main__':
     DDT = 0.1
     M = 15
     S = 4
-    env_object = SO_DFJSP_Environment(DDT, M, S)
+    env_object = SO_DFJSP_Environment(DDT, M, S)  # 定义环境对象
+    # 随机选择动作测试环境
