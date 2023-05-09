@@ -158,26 +158,84 @@ class SO_DFJSP_Environment(FJSP):
 
     def step(self, action):
         """根据动作选择工序选择规则+机器分配规则"""
-        task_rule = action[0]
-        machine_rule = action[1]
+        task_rule = action[0]  # 工序类型选择规则
+        machine_rule = action[1]  # 机器选择规则
+        rj_selected = self.task_select(task_rule)  # 选择的工序类型
+        m_selected = self.machine_select(machine_rule, rj_selected)  # 选择的机器
+        # 更新对应的各对象字典
 
+        # 判断是否移动时钟
+
+        # 判断新订单是否到达
 
         self.state = self.next_state
         return None
 
-    def task_machine(self):
-        """返回选择的工序和机器"""
-        return None
-
     def task_select(self, task_rule):
         """6个工序选择规则"""
+        # 工序选择规则1
+        if task_rule == 1:
+            if len(self.kind_task_delay_e_list) == 0:
+                rj = max(self.kind_task_available_list, key=lambda x: self.kind_task_dict[x].gap)
+            else:
+                rj = max(self.kind_task_available_list, key=lambda x: self.kind_task_delay_time_e[x])
+                rj_delay_time_e_max_list = [(r, j) for (r, j) in self.kind_task_available_list
+                                            if self.kind_task_delay_time_e[(r, j)] == self.kind_task_delay_time_e[rj]]
+                rj = max(rj_delay_time_e_max_list, key=lambda x: self.kind_task_dict[x].gap)
+        # 工序选择规则2
+        elif task_rule == 2:
+            if len(self.kind_task_delay_a_list) == 0:
+                rj = max(self.kind_task_available_list, key=lambda x: self.kind_task_dict[x].gap)
+            else:
+                rj = max(self.kind_task_available_list, key=lambda x: self.kind_task_delay_time_a[x])
+                rj_delay_time_a_max_list = [(r, j) for (r, j) in self.kind_task_available_list
+                                            if self.kind_task_delay_time_a[(r, j)] == self.kind_task_delay_time_a[rj]]
+                rj = max(rj_delay_time_a_max_list, key=lambda x: self.kind_task_dict[x].gap)
+        # 工序选择规则3
+        elif task_rule == 3:
+            rj = max(self.kind_task_available_list, key=lambda x: self.kind_task_dict[x].gap)
+            rj_gap_max_list = [(r, j) for (r, j) in self.kind_task_available_list
+                                         if self.kind_task_dict[(r, j)].gap == self.kind_task_dict[rj].gap]
+            rj = min(rj_gap_max_list, key=lambda x: self.kind_task_due_date[x])
+        # 工序选择规则4
+        elif task_rule == 4:
+            rj = max(self.kind_task_available_list, key=lambda x: self.kind_task_delay_time_e[x])
+            rj_delay_time_e_max_list = [(r, j) for (r, j) in self.kind_task_available_list
+                                        if self.kind_task_delay_time_e[(r, j)] == self.kind_task_delay_time_e[rj]]
+            rj = max(rj_delay_time_e_max_list, key=lambda x: self.kind_task_dict[x].gap)
+        # 工序选择规则5
+        elif task_rule == 5:
+            rj = max(self.kind_task_available_list, key=lambda x: self.kind_task_delay_time_a[x])
+            rj_delay_time_a_max_list = [(r, j) for (r, j) in self.kind_task_available_list
+                                        if self.kind_task_delay_time_a[(r, j)] == self.kind_task_delay_time_a[rj]]
+            rj = max(rj_delay_time_a_max_list, key=lambda x: self.kind_task_dict[x].gap)
+        # 工序选择规则6
+        elif task_rule == 6:
+            rj = random.choice(self.kind_task_available_list)
+        else:
+            rj = None
+            print("报错：未定义该工序动作规则。")
+        return rj
 
-        return None
-
-    def machine_select(self, machine_rule):
+    def machine_select(self, machine_rule, rj_selected):
         """4个机器分配规则"""
-
-        return None
+        machine_selectable_list = list(set(self.machine_idle_list)&set(self.machine_rj_dict[rj_selected]))  # 可选机器列表
+        # 机器分配规则1
+        if machine_rule == 1:
+            m = max(machine_selectable_list, key=lambda x: self.machine_dict[m].gap_rj_dict[rj_selected])
+        # 机器分配规则2
+        elif machine_rule == 2:
+            m = min(machine_selectable_list, key=lambda x: self.time_mrj_dict[m][rj_selected])
+        # 机器分配规则3
+        elif machine_rule == 3:
+            m = max(machine_selectable_list, key=lambda x: self.machine_dict[m].gap_ave)
+        # 机器分配规则4
+        elif machine_rule == 4:
+            m = random.choice(machine_selectable_list)
+        else:
+            m = None
+            print("报错：未定义该机器分配规则。")
+        return m
 
     def compute_reward(self):
         """根据剩余工件估计延迟时间计算奖励"""
@@ -201,7 +259,7 @@ class SO_DFJSP_Environment(FJSP):
 
 # 测试环境
 if __name__ == '__main__':
-    DDT = 1.0
+    DDT = 0.1
     M = 15
     S = 4
     env_object = SO_DFJSP_Environment(DDT, M, S)
