@@ -6,11 +6,11 @@ import random, math
 import numpy as np
 from SO_DFJSP import SO_DFJSP_Environment
 # 环境类
-class MO_DFJSP_Environment(FJSP):
+class MO_FJSSP_Environment(SO_DFJSP_Environment):
     """单目标柔性作业车间调度环境"""
-    environment_name = "single object fjsp"
+    environment_name = "single object FJSP"
     def __init__(self, DDT, M, S):
-        FJSP.__init__(self, DDT, M, S)
+        SO_DFJSP_Environment.__init__(self, DDT, M, S)
         # 封装基本属性
         self.step_count = 0  # 决策步
         self.step_time = 0  # 时间点
@@ -23,7 +23,7 @@ class MO_DFJSP_Environment(FJSP):
         self.reward = None  # 即时奖励
         self.done = False  # 是否为终止状态
         # 动作和观察的状态空间维度
-        self.action_space = [6, 4]  # 二维离散动作空间
+        self.action_space = [0, 1]  # 一维连续动作空间
         self.observation_space = 12  # 观察的状态向量空间
         self.reward_sum = 0  # 累计回报
         # 工序和机器选择规则相关属性
