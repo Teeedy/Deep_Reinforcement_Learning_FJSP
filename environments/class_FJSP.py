@@ -6,7 +6,6 @@ import random, math
 import time
 import numpy as np
 from SO_DFJSP_instance import Instance
-from data.data_process import Data
 from docplex.mp.model import Model
 
 class Order():

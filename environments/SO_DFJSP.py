@@ -1,9 +1,11 @@
-import copy
+"""
+单目标动态柔性作业车间调度环境
+目标：总延期时间
+动态因素：新订单到达
+"""
 import random, math
-import time
 import numpy as np
 from class_FJSP import FJSP
-
 # 环境类
 class SO_DFJSP_Environment(FJSP):
     """单目标柔性作业车间调度环境"""
