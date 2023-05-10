@@ -38,8 +38,10 @@ def create_actor_distribution(action_types, actor_output, action_size):
     return action_distribution
 
 class SharedAdam(torch.optim.Adam):
-    """Creates an adam optimizer object that is shareable between processes. Useful for algorithms like A3C. Code
-    taken from https://github.com/ikostrikov/pytorch-a3c/blob/master/my_optim.py"""
+    """
+    创建可在进程之间共享的adam优化器对象。对于像A3C这样的算法很有用. Code
+    taken from https://github.com/ikostrikov/pytorch-a3c/blob/master/my_optim.py
+    """
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, amsgrad=False):
         super(SharedAdam, self).__init__(params, lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, amsgrad=amsgrad)
         for group in self.param_groups:
@@ -97,7 +99,7 @@ class SharedAdam(torch.optim.Adam):
         return loss
 
 def flatten_action_id_to_actions(action_id_to_actions, global_action_id_to_primitive_action, num_primitive_actions):
-    """Converts the values in an action_id_to_actions dictionary back to the primitive actions they represent"""
+    """将action_id_to_actions字典中的值转换回它们所表示的基本动作"""
     flattened_action_id_to_actions = {}
     for key in action_id_to_actions.keys():
         actions = action_id_to_actions[key]

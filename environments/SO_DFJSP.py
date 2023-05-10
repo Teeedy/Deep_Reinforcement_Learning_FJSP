@@ -25,6 +25,7 @@ class SO_DFJSP_Environment(FJSP):
         self.done = False  # 是否为终止状态
         # 动作和观察的状态空间维度
         self.action_space = [6, 4]  # 二维离散动作空间
+        self.state_space = 24  # 状态空间
         self.observation_space = 12  # 观察的状态向量空间
         self.reward_sum = 0  # 累计回报
         # 工序和机器选择规则相关属性
