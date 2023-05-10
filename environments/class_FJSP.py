@@ -122,7 +122,10 @@ class Machine():
     @property
     def gap_ave(self):
         """计算gap_m_rj的均值"""
-        return sum(self.gap_rj_dict[(r, j)] for (r, j) in self.fluid_kind_task_list)/len(self.fluid_kind_task_list)
+        if len(self.fluid_kind_task_list) > 0:
+            return sum(self.gap_rj_dict[(r, j)] for (r, j) in self.fluid_kind_task_list)/len(self.fluid_kind_task_list)
+        else:
+            return 0
 
 # 问题实例类
 class FJSP(Instance):
@@ -247,6 +250,11 @@ class FJSP(Instance):
         # 求解模型
         solution = model.solve()
         x = solution.get_value_dict(X)
+        # 输出流体完工时间
+        process_rate_rj_sum = {(r, j): sum(x[m, (r, j)] * self.process_rate_m_rj_dict[m][(r, j)]
+                                           for m in self.machine_rj_dict[(r, j)]) for (r, j) in self.kind_task_tuple}
+        fluid_makespan = max(fluid_number[(r, j)]/process_rate_rj_sum[(r, j)] for (r, j) in self.kind_task_tuple)
+        print("流体完工时间：", fluid_makespan)
         return x
 
     def update_fluid_parameter(self, x):

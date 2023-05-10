@@ -42,11 +42,11 @@ class Instance():
     @property
     def N_sr(self):
         """每个订单中包含的每种工件类型的工件数量"""
-        return randint(5, 15)
+        return randint(5, 10)
     @property
     def t_si(self):
         """订单到达时间间隔"""
-        return uniform(400, 800)
+        return uniform(100, 200)
 
     def process_information(self):
         """生成实例文件数据，并存入csv文件"""
@@ -61,7 +61,8 @@ class Instance():
         time_rj_dict = {(r, j): sum([time_rjm_dict[(r, j)][m] for m in machine_rj_dict[(r, j)]]) / len(machine_rj_dict[(r, j)]) for (r, j) in kind_task_tuple}
         # 订单信息
         count_sr_dict = {s: tuple(self.N_sr for r in range(len(task_r_dict))) for s in self.order_tuple}  # [s][r]工件类型的数量
-        time_gap_s_dict = {s: sum([time_rj_dict[(r, j)] * count_sr_dict[s][r] for (r, j) in kind_task_tuple]) * self.DDT for s in self.order_tuple}  # 各订单交期-到达时间差值
+        time_gap_s_dict = {s: sum([time_rj_dict[(r, j)]*count_sr_dict[s][r] for (r, j) in kind_task_tuple]) *
+                              self.DDT/(self.machine_count*2) for s in self.order_tuple}  # 各订单交期-到达时间差值
         time_interval_list = [self.t_si for s in range(self.order_count - 1)]  # 各订单的间隔时间
         time_interval_list.insert(0, 0)
         time_arrive_s_dict = {s: int(sum(time_interval_list[:s + 1])) for s in self.order_tuple}  # 各订单的到达时间
