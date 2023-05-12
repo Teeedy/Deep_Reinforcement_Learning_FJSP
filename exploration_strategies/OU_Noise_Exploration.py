@@ -5,7 +5,7 @@ class OU_Noise_Exploration(Base_Exploration_Strategy):
     """Ornstein-Uhlenbeck noise process exploration strategy"""
     def __init__(self, config):
         super().__init__(config)
-        self.noise = OU_Noise(self.config.action_size, self.config.seed, self.config.hyperparameters["mu"],
+        self.noise = OU_Noise(self.config.actions_size, self.config.seed, self.config.hyperparameters["mu"],
                               self.config.hyperparameters["theta"], self.config.hyperparameters["sigma"])
 
     def perturb_action_for_exploration_purposes(self, action_info):

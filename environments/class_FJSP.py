@@ -7,6 +7,7 @@ import time
 import numpy as np
 from SO_DFJSP_instance import Instance
 from docplex.mp.model import Model
+from SO_DFJSP_instance_read import Data
 
 class Order():
     """订单对象"""
@@ -37,7 +38,6 @@ class Tasks(Kind):
         self.machine_tuple = None  # 可选加工机器编号
         # 附加属性
         self.job_now_list = []  # 处于该工序段的工件对象列表
-        self.task_now_list = []  # 处于该工序段的工序对象列表
         self.job_unprocessed_list = []  # 该工序段未被加工的工件对象列表
         self.task_unprocessed_list = []  # 该工序段还未加工的工序对象列表
         self.task_processed_list = []  # 该工序段已加工的工序对象列表
@@ -116,7 +116,8 @@ class Machine():
         """计算gap_mrj值"""
         gap_rj_dict = {}
         for (r, j) in self.fluid_kind_task_list:
-            gap_rj_dict[(r, j)] = (self.unprocessed_rj_dict[(r, j)] - self.fluid_unprocessed_rj_dict[(r, j)])/self.fluid_unprocessed_rj_arrival_dict[(r, j)]
+            gap_rj_dict[(r, j)] = (self.unprocessed_rj_dict[(r, j)] -
+                                   self.fluid_unprocessed_rj_dict[(r, j)])/self.fluid_unprocessed_rj_arrival_dict[(r, j)]
         return gap_rj_dict
     @property
     def gap_ave(self):
@@ -140,7 +141,8 @@ class FJSP(Instance):
         self.machine_dict = {m: Machine(m) for m in self.machine_tuple}  # 机器对象字典
         self.task_dict = {}  # (r,n,j) 工序对象字典 订单到达更新
         self.job_dict = {}  # (r,n)  # 工件对象字典
-        self.process_rate_m_rj_dict = {m: {(r, j): 1 / self.time_mrj_dict[m][(r, j)] for (r, j) in self.kind_task_m_dict[m]} for m in self.machine_tuple}  # 机器加工流体速率
+        self.process_rate_m_rj_dict = {m: {(r, j): 1 / self.time_mrj_dict[m][(r, j)]
+                                           for (r, j) in self.kind_task_m_dict[m]} for m in self.machine_tuple}  # 机器加工流体速率
 
         # 初始化参数对象中的列表和字典
         # self.reset_parameter()
@@ -156,7 +158,6 @@ class FJSP(Instance):
         for (r, j), kind_task_object in self.kind_task_dict.items():
             kind_task_object.machine_tuple = self.machine_rj_dict[(r, j)]  # 可选加工机器编号元组
             kind_task_object.job_now_list = []  # 处于该工序段的工件对象列表
-            kind_task_object.task_now_list = []  # 处于该工序段的工序对象列表
             kind_task_object.job_unprocessed_list = []  # 该工序段未被加工的工件对象列表
             kind_task_object.task_unprocessed_list = []  # 该工序段还未加工的工序对象列表
             kind_task_object.task_processed_list = []  # 该工序段已加工的工序对象列表
@@ -205,8 +206,6 @@ class FJSP(Instance):
                     self.kind_task_dict[(r, j)].job_unprocessed_list.append(job_object)
                     self.kind_task_dict[(r, j)].task_unprocessed_list.append(task_object)
                     self.task_dict[(r, n, j)] = task_object  # 加入工序字典
-                    if j == 0:  # 若为初始工序
-                        self.kind_task_dict[(r, 0)].task_now_list.append(task_object)  # 添加处于该工序的工序对象
         # 初始化流体属性
         for (r, j), task_kind_object in self.kind_task_dict.items():
             task_kind_object.fluid_number = len(task_kind_object.job_now_list)  # 处于该工序段的流体数量
@@ -274,7 +273,9 @@ class FJSP(Instance):
             for (r, j) in machine_object.fluid_kind_task_list:
                 kind_task_object = self.kind_task_dict[(r, j)]
                 # 订单到达时刻未被m加工的各工序类型数量
-                machine_object.fluid_unprocessed_rj_arrival_dict[(r, j)] = kind_task_object.fluid_unprocessed_number_start*machine_object.fluid_process_rate_rj_dict[(r, j)]/kind_task_object.fluid_rate_sum
+                machine_object.fluid_unprocessed_rj_arrival_dict[(r, j)] = \
+                    kind_task_object.fluid_unprocessed_number_start*\
+                    machine_object.fluid_process_rate_rj_dict[(r, j)]/kind_task_object.fluid_rate_sum
                 # 未被m加工的工序o_rj的总数 (r,j)
                 machine_object.unprocessed_rj_dict[(r, j)] = machine_object.fluid_unprocessed_rj_arrival_dict[(r, j)]
                 # 流体解中未被机器m加工的各工序类型总数

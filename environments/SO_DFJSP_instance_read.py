@@ -85,7 +85,9 @@ class Data():
             return count_sr_dict, time_arrive_s_dict, time_delivery_s_dict
 
 # 测试
+"""
 file_name = 'DDT0.5_M10_S2'
 path = '../data/generated'
 data = Data(path, file_name)
 print(data)
+"""

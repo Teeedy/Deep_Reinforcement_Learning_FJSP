@@ -39,8 +39,7 @@ def create_actor_distribution(action_types, actor_output, action_size):
 
 class SharedAdam(torch.optim.Adam):
     """
-    创建可在进程之间共享的adam优化器对象。对于像A3C这样的算法很有用. Code
-    taken from https://github.com/ikostrikov/pytorch-a3c/blob/master/my_optim.py
+    创建可在进程之间共享的adam优化器对象。对于像A3C这样的算法很有用.
     """
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, amsgrad=False):
         super(SharedAdam, self).__init__(params, lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, amsgrad=amsgrad)
