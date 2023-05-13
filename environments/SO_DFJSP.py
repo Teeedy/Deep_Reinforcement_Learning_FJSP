@@ -5,9 +5,9 @@
 """
 import random, math
 import time
-
+from utilities.Utility_Class import MyError
 import numpy as np
-from class_FJSP import FJSP
+from environments.class_FJSP import FJSP
 # 环境类
 class SO_DFJSP_Environment(FJSP):
     """单目标柔性作业车间调度环境"""
@@ -36,6 +36,7 @@ class SO_DFJSP_Environment(FJSP):
         self.kind_task_delay_a_list = []  # 实际延期工序类型列表
         self.kind_task_delay_time_a = {}  # 工序类型实际延期时间
         self.kind_task_delay_time_e = {}  # 工序类型估计延期时间
+        self.kind_task_delivery_urgency = {}  # 工件类型的交期紧急度
         self.kind_task_due_date = {}  # 工序类型的最小交期
         # 回报计算相关属性
         self.delay_time_sum_e_last = None  # 上一决策步的剩余工件估计总延期时间
@@ -106,16 +107,15 @@ class SO_DFJSP_Environment(FJSP):
         delay_job_number_e = 0  # 估计延迟工件总数
         job_number = 0  # 剩余工件总数
         self.delay_time_sum_e = 0  # 初始化剩余工件估计延期时间
-        self.delay_time_sum_a = 0  # 初始化剩余工件时间延期时间
+        self.delay_time_sum_a = 0  # 初始化剩余工件实际延期时间
         self.kind_task_delay_e_list = []  # 估计延期工序类型列表
         self.kind_task_delay_a_list = []  # 实际延期工序类型列表
-        # 依据流体模型计算各值
-        # 计算剩余工件的实际延总数和估计延迟总数
+        # 依据流体模型计算各值: 计算剩余工件的实际延总数和估计延迟总数
         for r, kind_object in self.kind_dict.items():
             job_number += len(kind_object.job_unprocessed_list)  # 剩余工件总数
             kind_end_task_object = self.kind_task_dict[(r, self.task_r_dict[r][-1])]  # 该类工件的最后一道工序对象
             for job_index, job_object in enumerate(kind_end_task_object.job_unprocessed_list):
-                if job_object.due_date < self.step_time:
+                if self.step_time > job_object.due_date:
                     delay_job_number_a += 1  # 剩余工件的实际延迟数
                     self.delay_time_sum_a += (self.step_time - job_object.due_date)  # 剩余工件实际延期时间
                 if self.step_time + kind_end_task_object.fluid_time_sum*(job_index + 1) > job_object.due_date:
@@ -124,43 +124,50 @@ class SO_DFJSP_Environment(FJSP):
                                               - job_object.due_date)  # 剩余工件估计延期时间
         # 计算剩余工序的实际延迟总数和估计延迟总数
         for (r, j), kind_task_object in self.kind_task_dict.items():
-            task_number += len(kind_task_object.task_unprocessed_list)
+            task_residue_rj = len(kind_task_object.task_unprocessed_list)  # rj的剩余工序总数
+            task_number += task_residue_rj  # 更新剩余工序总数
+            task_delay_rj_a = 0  # rj实际延期工序总数
+            task_delay_rj_e = 0  # rj估计延期工序总数
+            task_delay_time_rj_a = []  # rj 中未处理工序对象的(time_now-time_due_date)列表
+            task_delay_time_rj_e = []  # rj 中未处理工序对象的(estimate_time-due_date)列表
             for task_index, task_object in enumerate(kind_task_object.task_unprocessed_list):
                 if self.step_time > task_object.due_date:
-                    delay_task_number_a += 1
+                    task_delay_rj_a += 1
                 if self.step_time + kind_task_object.fluid_time_sum*(task_index + 1) > task_object.due_date:
-                    delay_task_number_e += 1
-            # 更新工序类型的估计延期时间/实际延期时间/最小交期时间/交期紧急度
+                    task_delay_rj_e += 1
+                task_delay_time_rj_a.append(self.step_time - task_object.due_date)
+                task_delay_time_rj_e.append(self.step_time + kind_task_object.fluid_time_sum*(task_index + 1) - task_object.due_date)
+            # 更新实际和估计延迟工序数
+            delay_task_number_a += task_delay_rj_a  # 更新实际延期工序数
+            delay_task_number_e += task_delay_rj_e  # 更新估计延期工序数
+            # 各工序最大延期时间/实际和估计延期工序类型
             if (r, j) in self.kind_task_available_list:
-                self.kind_task_delay_time_a[(r, j)] = self.step_time - kind_task_object.due_date_min
-                if self.kind_task_delay_time_a[(r, j)] > 0:
+                if task_delay_rj_a > 0:
                     self.kind_task_delay_a_list.append((r, j))  # 实际延期工序类型列表
-                self.kind_task_delay_time_e[(r, j)] = self.step_time + kind_task_object.fluid_time_sum\
-                                                      - kind_task_object.due_date_min
-                if self.kind_task_delay_time_e[(r, j)] > 0:
+                    self.kind_task_delay_time_a[(r, j)] = max(task_delay_time_rj_a)  # rj最大实际延期时间
+                if task_delay_rj_e > 0:
                     self.kind_task_delay_e_list.append((r, j))  # 估计延期工序类型列表
-                self.kind_task_due_date[(r, j)] = kind_task_object.due_date_min  # 该工序的交期最小值
-            else:
-                self.kind_task_delay_time_a[(r, j)] = None
-                self.kind_task_delay_time_e[(r, j)] = None
-                self.kind_task_due_date[(r, j)] = None
+                    self.kind_task_delay_time_e[(r, j)] = max(task_delay_time_rj_e)  # rj最大估计延期时间
+                # 更新rj交期紧急度
+                self.kind_task_delivery_urgency[(r, j)] = sum(task_delay_time_rj_e)/task_residue_rj  # rj交期紧急度
+                self.kind_task_due_date[(r, j)] = kind_task_object.due_date_min  # 最小交期时间
         # 输出延迟率
-        if self.done:
+        if not self.done:
+            dro_a = delay_task_number_a / task_number  # 实际剩余工序延迟率
+            dro_e = delay_task_number_e / task_number  # 估计剩余工序延迟率
+            drj_a = delay_job_number_a / job_number  # 实际剩余工件延迟率
+            drj_e = delay_job_number_e / job_number  # 估计剩余工件延迟率
+        else:
             dro_a = 0  # 实际剩余工序延迟率
             dro_e = 0  # 估计剩余工序延迟率
             drj_a = 0  # 实际剩余工件延迟率
             drj_e = 0  # 估计剩余工件延迟率
-        else:
-            dro_a = delay_task_number_a/task_number  # 实际剩余工序延迟率
-            dro_e = delay_task_number_e/task_number  # 估计剩余工序延迟率
-            drj_a = delay_job_number_a/job_number   # 实际剩余工件延迟率
-            drj_e = delay_job_number_e/job_number  # 估计剩余工件延迟率
         return dro_a, dro_e, drj_a, drj_e
 
     def step(self, action):
         """根据动作选择工序选择规则+机器分配规则"""
-        task_rule = action[0]  # 工序类型选择规则
-        machine_rule = action[1]  # 机器选择规则
+        task_rule = action[0] + 1  # 工序类型选择规则
+        machine_rule = action[1] + 1  # 机器选择规则
         rj_selected = self.task_select(task_rule)  # 选择的工序类型
         m_selected = self.machine_select(machine_rule, rj_selected)  # 选择的机器
         # 定义相关对象
@@ -266,19 +273,19 @@ class SO_DFJSP_Environment(FJSP):
             if len(self.kind_task_delay_e_list) == 0:
                 rj = max(self.kind_task_available_list, key=lambda x: self.kind_task_dict[x].gap)
             else:
-                rj = max(self.kind_task_available_list, key=lambda x: self.kind_task_delay_time_e[x])
-                rj_delay_time_e_max_list = [(r, j) for (r, j) in self.kind_task_available_list
-                                            if self.kind_task_delay_time_e[(r, j)] == self.kind_task_delay_time_e[rj]]
-                rj = max(rj_delay_time_e_max_list, key=lambda x: self.kind_task_dict[x].gap)
+                rj = max(self.kind_task_delay_e_list, key=lambda x: self.kind_task_delay_time_e[x])
+                rj_urgency_max_list = [(r, j) for (r, j) in self.kind_task_delay_e_list
+                                       if self.kind_task_delay_time_e[(r, j)] == self.kind_task_delay_time_e[rj]]
+                rj = max(rj_urgency_max_list, key=lambda x: self.kind_task_dict[x].gap)
         # 工序选择规则2
         elif task_rule == 2:
             if len(self.kind_task_delay_a_list) == 0:
                 rj = max(self.kind_task_available_list, key=lambda x: self.kind_task_dict[x].gap)
             else:
-                rj = max(self.kind_task_available_list, key=lambda x: self.kind_task_delay_time_a[x])
-                rj_delay_time_a_max_list = [(r, j) for (r, j) in self.kind_task_available_list
-                                            if self.kind_task_delay_time_a[(r, j)] == self.kind_task_delay_time_a[rj]]
-                rj = max(rj_delay_time_a_max_list, key=lambda x: self.kind_task_dict[x].gap)
+                rj = max(self.kind_task_delay_a_list, key=lambda x: self.kind_task_delay_time_a[x])
+                rj_due_date_min_list = [(r, j) for (r, j) in self.kind_task_delay_a_list
+                                        if self.kind_task_delay_time_a[(r, j)] == self.kind_task_delay_time_a[rj]]
+                rj = max(rj_due_date_min_list, key=lambda x: self.kind_task_dict[x].gap)
         # 工序选择规则3
         elif task_rule == 3:
             rj = max(self.kind_task_available_list, key=lambda x: self.kind_task_dict[x].gap)
@@ -287,22 +294,21 @@ class SO_DFJSP_Environment(FJSP):
             rj = min(rj_gap_max_list, key=lambda x: self.kind_task_due_date[x])
         # 工序选择规则4
         elif task_rule == 4:
-            rj = max(self.kind_task_available_list, key=lambda x: self.kind_task_delay_time_e[x])
-            rj_delay_time_e_max_list = [(r, j) for (r, j) in self.kind_task_available_list
-                                        if self.kind_task_delay_time_e[(r, j)] == self.kind_task_delay_time_e[rj]]
-            rj = max(rj_delay_time_e_max_list, key=lambda x: self.kind_task_dict[x].gap)
+            rj = max(self.kind_task_available_list, key=lambda x: self.kind_task_delivery_urgency[x])
+            rj_urgency_max_list = [(r, j) for (r, j) in self.kind_task_available_list
+                                   if self.kind_task_delivery_urgency[(r, j)] == self.kind_task_delivery_urgency[rj]]
+            rj = max(rj_urgency_max_list, key=lambda x: self.kind_task_dict[x].gap)
         # 工序选择规则5
         elif task_rule == 5:
-            rj = max(self.kind_task_available_list, key=lambda x: self.kind_task_delay_time_a[x])
-            rj_delay_time_a_max_list = [(r, j) for (r, j) in self.kind_task_available_list
-                                        if self.kind_task_delay_time_a[(r, j)] == self.kind_task_delay_time_a[rj]]
-            rj = max(rj_delay_time_a_max_list, key=lambda x: self.kind_task_dict[x].gap)
+            rj = min(self.kind_task_available_list, key=lambda x: self.kind_task_due_date[x])
+            rj_due_date_min_list = [(r, j) for (r, j) in self.kind_task_available_list
+                                    if self.kind_task_due_date[(r, j)] == self.kind_task_due_date[rj]]
+            rj = max(rj_due_date_min_list, key=lambda x: self.kind_task_dict[x].gap)
         # 工序选择规则6
         elif task_rule == 6:
             rj = random.choice(self.kind_task_available_list)
         else:
-            rj = None
-            print("报错：未定义该工序动作规则。")
+            raise MyError("报错：未定义该工序动作规则")
         return rj
 
     def machine_select(self, machine_rule, rj_selected):
@@ -321,8 +327,7 @@ class SO_DFJSP_Environment(FJSP):
         elif machine_rule == 4:
             m = random.choice(machine_selectable_list)
         else:
-            m = None
-            print("报错：未定义该机器分配规则。")
+            raise MyError("报错：未定义该机器分配规则。")
         return m
 
     def compute_reward(self):
@@ -346,18 +351,19 @@ class SO_DFJSP_Environment(FJSP):
         return [(r, j) for (r, j) in self.kind_task_tuple if len(self.kind_task_dict[(r, j)].job_now_list) > 0 and
                 set(self.kind_task_dict[(r, j)].fluid_machine_list) & set(self.machine_idle_list)]
 
+"""
 # 测试环境
 if __name__ == '__main__':
-    DDT = 0.5
-    M = 20
-    S = 1
+    DDT = 1.0
+    M = 15
+    S = 10
     time_start = time.time()
     env_object = SO_DFJSP_Environment(DDT, M, S)  # 定义环境对象
     state = env_object.reset()  # 初始化状态
     replay_list = []
     # 随机选择动作测试环境
     while not env_object.done:
-        action = (random.choice([1, 2, 3, 4, 5, 6]), random.choice([1, 2, 3, 4]))  # action = policy_network(state)
+        action = (random.choice([0, 1, 2, 3, 4, 5]), random.choice([0, 1, 2, 3]))  # action = policy_network(state)
         next_state, reward, done = env_object.step(action)
         replay_list.append([state, action, next_state, reward, done])
         state = next_state
@@ -368,3 +374,4 @@ if __name__ == '__main__':
     print("机器完工时间", [machine_object.time_end for m, machine_object in env_object.machine_dict.items()])
     print("单周期耗时：", time.time() - time_start)
     print("实际延期时间：", env_object.delay_time_sum)
+"""

@@ -127,7 +127,10 @@ class DA3C(Base_Agent, Config):
         self.actor_task_optimizer.share_memory()
         self.actor_machine_optimizer.share_memory()
         self.critic_optimizer.share_memory()
-        optimizer_worker = multiprocessing.Process(target=self.update_task_model, args=(gradient_updates_queue_actor_task,))
+        optimizer_worker = multiprocessing.Process(target=self.update_shared_model,
+                                                   args=(gradient_updates_queue_actor_task,
+                                                         gradient_updates_queue_actor_machine,
+                                                         gradient_updates_queue_critic))
         optimizer_worker.start()  # 启动总梯度更新主线程
 
         for process_num in range(self.worker_processes):
@@ -156,31 +159,25 @@ class DA3C(Base_Agent, Config):
             print("该训练过程未保存模型")
         return None
 
-    def update_task_model(self, gradient_updates_queue_actor_task):
+    def update_shared_model(self, gradient_updates_queue_actor_task,
+                            gradient_updates_queue_actor_machine,
+                            gradient_updates_queue_critic):
         """收到工作线程的梯度{信息传入队列}，更新全局网络梯度"""
         while True:
             gradients_actor_task = gradient_updates_queue_actor_task.get()
+            gradients_actor_machine = gradient_updates_queue_actor_machine.get()
+            gradients_critic = gradient_updates_queue_critic.get()
             with self.optimizer_lock:
                 # 更新工序策略网络梯度
                 self.actor_task_optimizer.zero_grad()
                 for grads, params in zip(gradients_actor_task, self.actor_net_task.parameters()):
                     params._grad = grads  # maybe need to do grads.clone()  # 子线程梯度值传递给全局网络参数
                 self.actor_task_optimizer.step()  # 依据传递的新的梯度值更新参数
-
-    def update_machine_model(self, gradient_updates_queue_actor_machine):
-        while True:
-            gradients_actor_machine = gradient_updates_queue_actor_machine.get()
-            with self.optimizer_lock:
                 # 更新机器策略网络梯度
                 self.actor_machine_optimizer.zero_grad()
                 for grads, params in zip(gradients_actor_machine, self.actor_net_machine.parameters()):
                     params._grad = grads  # maybe need to do grads.clone()  # 子线程梯度值传递给全局网络参数
                 self.actor_machine_optimizer.step()  # 依据传递的新的梯度值更新参数
-
-    def update_critic_model(self, gradient_updates_queue_critic):
-        while True:
-            gradients_critic = gradient_updates_queue_critic.get()
-            with self.optimizer_lock:
                 # 更新全局评论家网络梯度
                 self.critic_optimizer.zero_grad()
                 for grads, params in zip(gradients_critic, self.critic_net.parameters()):
@@ -255,9 +252,11 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
             self.critic_outputs = []  # 评论家输出的V值列表
             # 采样一条轨迹
             while not done:
-                action_task, action_task_log_prob = self.pick_action_and_log_prob(self.local_actor_task_model, state, epsilon_exploration)
+                action_task, action_task_log_prob = self.pick_action_and_log_prob(self.local_actor_task_model, state,
+                                                                                  epsilon_exploration)
                 state_add = np.append(state, action_task)  # 带选择的工序规则信息的状态
-                action_machine, action_machine_log_prob = self.pick_action_and_log_prob(self.local_actor_machine_model, state_add, epsilon_exploration)
+                action_machine, action_machine_log_prob = self.pick_action_and_log_prob(self.local_actor_machine_model,
+                                                                                        state_add, epsilon_exploration)
                 critic_outputs = self.get_critic_value(self.local_critic_model, state)
                 actions = np.array([action_task, action_machine])  # 二维离散动作
                 next_state, reward, done, _ = self.environment.step(actions)
