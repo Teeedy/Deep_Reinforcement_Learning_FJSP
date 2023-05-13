@@ -16,6 +16,7 @@ from utilities.data_structures.Config import Config
 from environments.SO_DFJSP import SO_DFJSP_Environment
 import torch.nn.functional as F
 from torch import nn
+from utilities.Utility_Class import MyError
 
 # 构建工序策略网络类
 class ActorCriticNet(nn.Module):
@@ -84,11 +85,11 @@ class DA3C(Base_Agent, Config):
         self.num_episodes_to_run = self.hyper_parameters["DA3C"]["num_episodes_to_run"]  # 总的步数
         self.epsilon_decay_rate_denominator = self.hyper_parameters["DA3C"]["epsilon_decay_rate_denominator"]
         # 初始化锁对象 用来更新全局网络参数
-        self.optimizer_lock = None
+        self.optimizer_lock = multiprocessing.Lock()   # 创建锁对象，用于更新全局网络参数
         # 定义策略网络、评论家网络、优化器
         self.actor_critic = ActorCriticNet(input_size=24, hidden_size=200, hidden_layer=3, output_size=1,
                                            input_size_1=24, hidden_layer_1=3, output_size_1=6,
-                                           input_size_2=25, hidden_layer_2=3, output_size_2=4).to(self.device)
+                                           input_size_2=25, hidden_layer_2=3, output_size_2=4)
         self.actor_critic_optimizer = SharedAdam(self.actor_critic.parameters(), lr=self.learning_rate, eps=1e-4)
 
     def generated_new_environment(self):
@@ -103,19 +104,16 @@ class DA3C(Base_Agent, Config):
         start = time.time()
         gradient_updates_queue = Queue()
         episode_number = multiprocessing.Value('i', 0)  # 多线程共享整数型+初始值为0的参数
-        self.optimizer_lock = multiprocessing.Lock()   # 创建锁对象，用于更新全局网络参数
         episodes_per_process = int(self.num_episodes_to_run / self.worker_processes) + 1
         processes = []  # 初始化线程列表
         self.actor_critic.share_memory()
         self.actor_critic_optimizer.share_memory()
         optimizer_worker = multiprocessing.Process(target=self.update_shared_model, args=(gradient_updates_queue,))
         optimizer_worker.start()  # 启动总梯度更新主线程
-
         for process_num in range(self.worker_processes):
             worker = Actor_Critic_Worker(process_num, self.actor_critic, episode_number, self.optimizer_lock,
                                          self.actor_critic_optimizer, self.hyper_parameters, episodes_per_process,
-                                         self.epsilon_decay_rate_denominator, copy.deepcopy(self.actor_critic),
-                                         gradient_updates_queue)
+                                         copy.deepcopy(self.actor_critic), gradient_updates_queue)
             worker.start()  # 启动各子线程run()函数
             processes.append(worker)
         for worker in processes:
@@ -146,10 +144,8 @@ class DA3C(Base_Agent, Config):
 
 class Actor_Critic_Worker(torch.multiprocessing.Process):
     """演员评论工作者将玩游戏的指定集数 """
-    def __init__(self, worker_num, actor_task_model, actor_machine_model, critic_model, counter, optimizer_lock,
-                 actor_task_optimizer, actor_machine_optimizer, critic_optimizer, hyper_parameter, episodes_to_run,
-                 epsilon_decay_denominator, local_actor_task_model, local_actor_machine_model, local_critic_model,
-                 gradient_updates_queue_actor_task, gradient_updates_queue_actor_machine, gradient_updates_queue_critic):
+    def __init__(self, worker_num, actor_critic, counter, optimizer_lock, actor_critic_optimizer, hyper_parameter,
+                 episodes_to_run, local_actor_critic_model, gradient_updates_queue):
         torch.multiprocessing.Process.__init__(self)
         self.environment = self.generated_new_environment()  # 初始化环境对象
         self.action_types = self.environment.action_types  # 动作类型
@@ -157,28 +153,18 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
         self.gradient_clipping_norm = hyper_parameter["DA3C"]["gradient_clipping_norm"]  # 梯度裁剪值
         self.discount_rate = hyper_parameter["DA3C"]["discount_rate"]  # 折扣率
         self.exploration_worker_difference = hyper_parameter["DA3C"]["exploration_worker_difference"]
+        self.epsilon_decay_denominator = hyper_parameter["DA3C"]["epsilon_decay_rate_denominator"]
         self.normalise_rewards = True  # 标准化回报
         self.actions_size = self.environment.actions_size  # 二维离散动作[6, 4]
-        self.actor_task_model = actor_task_model  # 工序策略网络
-        self.actor_machine_model = actor_machine_model  # 机器策略网络
-        self.critic_model = critic_model  # 全局评论家网络
-        self.local_actor_task_model = local_actor_task_model  # 局部工序策略网络
-        self.local_actor_machine_model = local_actor_machine_model  # 局部机器策略网络
-        self.local_critic_model = local_critic_model  # 局部评论家网络
-        self.local_actor_task_optimizer = Adam(self.local_actor_task_model.parameters(), lr=0.0, eps=1e-4)
-        self.local_actor_machine_optimizer = Adam(self.local_actor_machine_model.parameters(), lr=0.0, eps=1e-4)
-        self.local_critic_optimizer = Adam(self.local_critic_model.parameters(), lr=0.0, eps=1e-4)
+        self.actor_critic_model = actor_critic  # 工序策略网络
+        self.local_actor_critic_model = local_actor_critic_model  # 局部工序策略网络
+        self.local_actor_critic_optimizer = Adam(self.local_actor_critic_model.parameters(), lr=0.0, eps=1e-4)
         self.counter = counter
         self.optimizer_lock = optimizer_lock
-        self.actor_task_optimizer = actor_task_optimizer
-        self.actor_machine_optimizer = actor_machine_optimizer
-        self.critic_optimizer = critic_optimizer
+        self.actor_critic_optimizer = actor_critic_optimizer
         self.episodes_to_run = episodes_to_run  # 周期总数
-        self.epsilon_decay_denominator = epsilon_decay_denominator
         self.episode_number = 0  # 子线程周期数
-        self.gradient_updates_queue_actor_task = gradient_updates_queue_actor_task
-        self.gradient_updates_queue_actor_machine = gradient_updates_queue_actor_machine
-        self.gradient_updates_queue_critic = gradient_updates_queue_critic
+        self.gradient_updates_queue = gradient_updates_queue
         self.episode_states = []  # 状态列表
         self.episode_actions = []  # 动作列表
         self.episode_rewards = []  # 回报列表
@@ -198,9 +184,7 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
         torch.set_num_threads(1)
         for ep_ix in range(self.episodes_to_run):
             with self.optimizer_lock:  # 锁定网络更新线程网络参数
-                Base_Agent.copy_model_over(self.actor_task_model, self.local_actor_task_model)
-                Base_Agent.copy_model_over(self.actor_machine_model, self.local_actor_machine_model)
-                Base_Agent.copy_model_over(self.critic_model, self.local_critic_model)
+                Base_Agent.copy_model_over(self.actor_critic_model, self.local_actor_critic_model)
             epsilon_exploration = self.calculate_new_exploration()  # 计算新的探索参数
             state = self.generated_new_environment().reset()  # 初始化状态
             done = False
@@ -212,10 +196,13 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
             self.critic_outputs = []  # 评论家输出的V值列表
             # 采样一条轨迹
             while not done:
-                action_task, action_task_log_prob = self.pick_action_and_log_prob(self.local_actor_task_model, state, epsilon_exploration)
+                action_task, action_task_log_prob = self.pick_action_and_log_prob(self.local_actor_critic_model, state,
+                                                                                  epsilon_exploration, forward="task")
                 state_add = np.append(state, action_task)  # 带选择的工序规则信息的状态
-                action_machine, action_machine_log_prob = self.pick_action_and_log_prob(self.local_actor_machine_model, state_add, epsilon_exploration)
-                critic_outputs = self.get_critic_value(self.local_critic_model, state)
+                action_machine, action_machine_log_prob = self.pick_action_and_log_prob(self.local_actor_critic_model,
+                                                                                        state_add, epsilon_exploration,
+                                                                                        forward="machine")
+                critic_outputs = self.get_critic_value(self.local_actor_critic_model, state)
                 actions = np.array([action_task, action_machine])  # 二维离散动作
                 next_state, reward, done, _ = self.environment.step(actions)
                 self.episode_states.append(state)
@@ -226,8 +213,8 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
                 self.critic_outputs.append(critic_outputs)
                 state = next_state
 
-            critic_loss, actor_task_loss, actor_machine_loss = self.calculate_total_loss()
-            self.put_gradients_in_queue(critic_loss, actor_task_loss, actor_machine_loss)
+            total_loss = self.calculate_total_loss()
+            self.put_gradients_in_queue(total_loss)
             self.episode_number += 1
             # 每间隔10个周期运行一次测试算例并动态绘制目标值曲线
             with self.counter.get_lock():
@@ -243,14 +230,17 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
                                           epsilon * self.exploration_worker_difference))
         return epsilon
 
-    def pick_action_and_log_prob(self, policy, state, epsilon_exploration=None):
+    def pick_action_and_log_prob(self, policy, state, epsilon_exploration=None, forward=None):
         """使用策略选择一个动作"""
         state = torch.from_numpy(state).float().unsqueeze(0)  # 状态转为tensor类型
-        actor_output = policy.forward(state)
-        if policy.name == "task_policy":
+        if forward == "task":
+            actor_output = policy.forward_task(state)
             action_size = self.actions_size[0]
-        else:
+        elif forward == "machine":
+            actor_output = policy.forward_machine(state)
             action_size = self.actions_size[1]
+        else:
+            raise MyError("采集动作报错：未定义该网络")
         # 动作分布实例
         action_distribution = create_actor_distribution(self.action_types, actor_output, action_size)  # 动作分布实例
         action = action_distribution.sample().cpu().numpy()  # 采样一个动作
@@ -264,7 +254,7 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
 
     def get_critic_value(self, policy, state):
         """返回评论家网络值"""
-        critic_output = policy.forward(state)
+        critic_output = policy.forward_critic(state)
         return critic_output
 
     def calculate_log_action_probability(self, actions, action_distribution):
@@ -280,7 +270,8 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
         critic_loss, advantages = self.calculate_critic_loss_and_advantages(discounted_returns)  # 计算评论家损失和优势函数
         actor_task_loss = self.calculate_actor_loss(advantages, self.episode_log_action_task_probabilities)
         actor_machine_loss = self.calculate_actor_loss(advantages, self.episode_log_action_machine_probabilities)
-        return critic_loss, actor_task_loss, actor_machine_loss
+        total_loss = critic_loss + actor_machine_loss + actor_task_loss
+        return total_loss
 
     def calculate_discounted_returns(self):
         """
@@ -318,26 +309,14 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
         actor_loss = actor_loss.mean()
         return actor_loss
 
-    def put_gradients_in_queue(self, critic_loss, actor_task_loss, actor_machine_loss):
+    def put_gradients_in_queue(self, total_loss):
         """将梯度放入队列中，以供优化过程用于更新共享模型"""
         # 线程工序策略网络梯度加入队列
-        self.local_actor_task_optimizer.zero_grad()
-        actor_task_loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.local_actor_task_model.parameters(), self.gradient_clipping_norm)  # 梯度裁剪
-        gradients = [param.grad.clone() for param in self.local_actor_task_model.parameters()]  # 线程子网络梯度
-        self.gradient_updates_queue_actor_task.put(gradients)
-        # 线程机器策略网络梯度加入队列
-        self.local_actor_machine_optimizer.zero_grad()
-        actor_machine_loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.local_actor_machine_model.parameters(), self.gradient_clipping_norm)  # 梯度裁剪
-        gradients = [param.grad.clone() for param in self.local_actor_machine_model.parameters()]  # 线程子网络梯度
-        self.gradient_updates_queue_actor_machine.put(gradients)
-        # 线程机器策略网络梯度加入队列
-        self.local_critic_optimizer.zero_grad()
-        critic_loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.local_critic_model.parameters(), self.gradient_clipping_norm)  # 梯度裁剪
-        gradients = [param.grad.clone() for param in self.local_critic_model.parameters()]  # 线程子网络梯度
-        self.gradient_updates_queue_critic.put(gradients)
+        self.local_actor_critic_optimizer.zero_grad()
+        total_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.local_actor_critic_model.parameters(), self.gradient_clipping_norm)  # 梯度裁剪
+        gradients = [param.grad.clone() for param in self.local_actor_critic_model.parameters()]  # 线程子网络梯度
+        self.gradient_updates_queue.put(gradients)
 
 # 测试算法
 if __name__ == '__main__':

@@ -287,7 +287,7 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
 
     def pick_action_and_log_prob(self, policy, state, epsilon_exploration=None):
         """使用策略选择一个动作"""
-        state = torch.from_numpy(state).float().unsqueeze(0)  # 状态转为tensor类型
+        state = torch.from_numpy(state).float().unsqueeze(0).cuda()  # 状态转为tensor类型
         actor_output = policy.forward(state)
         if policy.name == "task_policy":
             action_size = self.actions_size[0]
@@ -306,6 +306,7 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
 
     def get_critic_value(self, policy, state):
         """返回评论家网络值"""
+        state = torch.from_numpy(state).float().unsqueeze(0).cuda()
         critic_output = policy.forward(state)
         return critic_output
 
