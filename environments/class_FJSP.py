@@ -8,6 +8,7 @@ import numpy as np
 from SO_DFJSP_instance import Instance
 from docplex.mp.model import Model
 from SO_DFJSP_instance_read import Data
+from utilities.Utility_Class import MyError
 
 class Order():
     """订单对象"""
@@ -62,7 +63,11 @@ class Tasks(Kind):
     @property
     def due_date_min(self):
         """工序rj阶段工件的交期最小值"""
-        return self.job_now_list[0].due_date
+        if len(self.job_now_list) > 0:
+            min_due_date = min(job_object.due_date for job_object in self.job_now_list)
+        else:
+            raise MyError("当前工序rj阶段不存在工件")
+        return min_due_date
 
 class Job(Kind):
     """工件类"""
