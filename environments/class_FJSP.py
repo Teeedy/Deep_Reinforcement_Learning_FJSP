@@ -5,9 +5,9 @@ import copy
 import random, math
 import time
 import numpy as np
-from SO_DFJSP_instance import Instance
+from environments.SO_DFJSP_instance import Instance
 from docplex.mp.model import Model
-from SO_DFJSP_instance_read import Data
+from environments.SO_DFJSP_instance_read import Data
 from utilities.Utility_Class import MyError
 
 class Order():
@@ -285,9 +285,12 @@ class FJSP(Instance):
                 machine_object.unprocessed_rj_dict[(r, j)] = machine_object.fluid_unprocessed_rj_arrival_dict[(r, j)]
                 # 流体解中未被机器m加工的各工序类型总数
                 machine_object.fluid_unprocessed_rj_dict[(r, j)] = machine_object.fluid_unprocessed_rj_arrival_dict[(r, j)]
+
+"""
 # 测试环境
 if __name__ == '__main__':
     DDT = 1.0
     M = 15
     S = 4
     fjsp_object = FJSP(DDT, M, S)
+"""
