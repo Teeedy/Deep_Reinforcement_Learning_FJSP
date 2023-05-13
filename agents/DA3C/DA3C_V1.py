@@ -18,19 +18,10 @@ import torch.nn.functional as F
 from torch import nn
 
 # 构建工序策略网络类
-class ActorCriticNet(nn.Module):
-    def __init__(self,input_size, hidden_size, hidden_layer, output_size, input_size_1, hidden_layer_1, output_size_1,
-                 input_size_2, hidden_layer_2, output_size_2):
-        super(ActorCriticNet, self).__init__()
-        # 定义评论家网络输入层
-        self.layers = nn.ModuleList([nn.Linear(input_size, hidden_size), nn.BatchNorm1d(hidden_size), nn.ReLU()])
-        # 定义评论家网络隐藏层
-        for i in range(hidden_layer - 1):
-            self.layers.append(nn.Linear(hidden_size, hidden_size))
-            self.layers.append(nn.BatchNorm1d(hidden_size))
-            self.layers.append(nn.ReLU())
-        # 定义评论家网络输出层
-        self.layers.append(nn.Linear(hidden_size, output_size))
+class TaskPolicyNet(nn.Module):
+    def __init__(self, input_size_1, hidden_size, hidden_layer_1, output_size_1):
+        super(TaskPolicyNet, self).__init__()
+        self.name = "task_policy"
         # 定义工序策略网络输入层
         self.layers_1 = nn.ModuleList([nn.Linear(input_size_1, hidden_size), nn.BatchNorm1d(hidden_size), nn.ReLU()])
         # 定义工序策略网络隐藏层
@@ -40,6 +31,18 @@ class ActorCriticNet(nn.Module):
             self.layers_1.append(nn.ReLU())
         # 定义工序策略网络输出层
         self.layers_1.append(nn.Linear(hidden_size, output_size_1))
+
+    def forward(self, x):
+        for layer in self.layers_1:
+            x = layer(x)
+        x = F.softmax(x, dim=-1)
+        return x
+
+# 构建机器策略网络类
+class MachinePolicyNet(nn.Module):
+    def __init__(self, input_size_2, hidden_size, hidden_layer_2, output_size_2):
+        super(MachinePolicyNet, self).__init__()
+        self.name = "machine_policy"
         # 定义机器策略网络输入层
         self.layers_2 = nn.ModuleList([nn.Linear(input_size_2, hidden_size), nn.BatchNorm1d(hidden_size), nn.ReLU()])
         # 定义机器策略网络隐藏层
@@ -50,23 +53,30 @@ class ActorCriticNet(nn.Module):
         # 定义机器策略网络输出层
         self.layers_2.append(nn.Linear(hidden_size, output_size_2))
 
-    def forward_task(self, x):
-        for layer in self.layers_1:
-            x = layer(x)
-        x = F.softmax(x, dim=-1)
-        return x
-
-    def forward_machine(self, x):
+    def forward(self, x):
         for layer in self.layers_2:
             x = layer(x)
         x = F.softmax(x, dim=-1)
         return x
 
-    def forward_critic(self, x):
+# 构建评论家网络
+class CriticNet(nn.Module):
+    def __init__(self, input_size, hidden_size, hidden_layer, output_size):
+        super(CriticNet, self).__init__()
+        # 定义评论家网络输入层
+        self.layers = nn.ModuleList([nn.Linear(input_size, hidden_size), nn.BatchNorm1d(hidden_size), nn.ReLU()])
+        # 定义评论家网络隐藏层
+        for i in range(hidden_layer - 1):
+            self.layers.append(nn.Linear(hidden_size, hidden_size))
+            self.layers.append(nn.BatchNorm1d(hidden_size))
+            self.layers.append(nn.ReLU())
+        # 定义评论家网络输出层
+        self.layers.append(nn.Linear(hidden_size, output_size))
+
+    def forward(self, x):
         for layer in self.layers:
             x = layer(x)
         return x
-
 
 class DA3C(Base_Agent, Config):
     """Actor critic A3C algorithm"""
@@ -85,11 +95,14 @@ class DA3C(Base_Agent, Config):
         self.epsilon_decay_rate_denominator = self.hyper_parameters["DA3C"]["epsilon_decay_rate_denominator"]
         # 初始化锁对象 用来更新全局网络参数
         self.optimizer_lock = None
-        # 定义策略网络、评论家网络、优化器
-        self.actor_critic = ActorCriticNet(input_size=24, hidden_size=200, hidden_layer=3, output_size=1,
-                                           input_size_1=24, hidden_layer_1=3, output_size_1=6,
-                                           input_size_2=25, hidden_layer_2=3, output_size_2=4).to(self.device)
-        self.actor_critic_optimizer = SharedAdam(self.actor_critic.parameters(), lr=self.learning_rate, eps=1e-4)
+        # 定义策略网络和评论家网络
+        self.actor_net_task = TaskPolicyNet(input_size_1=24, hidden_size=200, hidden_layer_1=3, output_size_1=6).to(self.device)
+        self.actor_net_machine = MachinePolicyNet(input_size_2=25, hidden_size=200, hidden_layer_2=3, output_size_2=4).to(self.device)
+        self.critic_net = CriticNet(input_size=24, hidden_size=200, hidden_layer=3, output_size=1).to(self.device)
+        # 定义优化器
+        self.actor_task_optimizer = SharedAdam(self.actor_net_task.parameters(), lr=self.learning_rate, eps=1e-4)
+        self.actor_machine_optimizer = SharedAdam(self.actor_net_machine.parameters(), lr=self.learning_rate, eps=1e-4)
+        self.critic_optimizer = SharedAdam(self.critic_net.parameters(), lr=self.learning_rate, eps=1e-4)
 
     def generated_new_environment(self):
         """生成新环境"""
@@ -101,21 +114,33 @@ class DA3C(Base_Agent, Config):
     def run_n_episodes(self):
         """运行环境n次直到完成，然后总结结果并保存模型(如果要求的话)"""
         start = time.time()
-        gradient_updates_queue = Queue()
+        gradient_updates_queue_actor_task = Queue()
+        gradient_updates_queue_actor_machine = Queue()
+        gradient_updates_queue_critic = Queue()
         episode_number = multiprocessing.Value('i', 0)  # 多线程共享整数型+初始值为0的参数
         self.optimizer_lock = multiprocessing.Lock()   # 创建锁对象，用于更新全局网络参数
         episodes_per_process = int(self.num_episodes_to_run / self.worker_processes) + 1
         processes = []  # 初始化线程列表
-        self.actor_critic.share_memory()
-        self.actor_critic_optimizer.share_memory()
-        optimizer_worker = multiprocessing.Process(target=self.update_shared_model, args=(gradient_updates_queue,))
+        self.actor_net_task.share_memory()
+        self.actor_net_machine.share_memory()
+        self.critic_net.share_memory()
+        self.actor_task_optimizer.share_memory()
+        self.actor_machine_optimizer.share_memory()
+        self.critic_optimizer.share_memory()
+        optimizer_worker = multiprocessing.Process(target=self.update_shared_model,
+                                                   args=(gradient_updates_queue_actor_task,
+                                                         gradient_updates_queue_actor_machine,
+                                                         gradient_updates_queue_critic))
         optimizer_worker.start()  # 启动总梯度更新主线程
 
         for process_num in range(self.worker_processes):
-            worker = Actor_Critic_Worker(process_num, self.actor_critic, episode_number, self.optimizer_lock,
-                                         self.actor_critic_optimizer, self.hyper_parameters, episodes_per_process,
-                                         self.epsilon_decay_rate_denominator, copy.deepcopy(self.actor_critic),
-                                         gradient_updates_queue)
+            worker = Actor_Critic_Worker(process_num, self.actor_net_task, self.actor_net_machine, self.critic_net,
+                                         episode_number, self.optimizer_lock, self.actor_task_optimizer,
+                                         self.actor_machine_optimizer, self.critic_optimizer, self.hyper_parameters,
+                                         episodes_per_process, self.epsilon_decay_rate_denominator,
+                                         copy.deepcopy(self.actor_net_task), copy.deepcopy(self.actor_net_machine),
+                                         copy.deepcopy(self.critic_net), gradient_updates_queue_actor_task,
+                                         gradient_updates_queue_actor_machine, gradient_updates_queue_critic)
             worker.start()  # 启动各子线程run()函数
             processes.append(worker)
         for worker in processes:
@@ -128,21 +153,36 @@ class DA3C(Base_Agent, Config):
     def save_actor_model(self, save_model_boole=False):
         """保存全局策略网络"""
         if save_model_boole:
-            torch.save(self.actor_critic.state_dict(), 'actor_net_task.ckpt')
+            torch.save(self.actor_net_task.state_dict(), 'actor_net_task.ckpt')
+            torch.save(self.actor_net_machine.state_dict(), 'actor_net_machine.ckpt')
         else:
             print("该训练过程未保存模型")
         return None
 
-    def update_shared_model(self, gradient_updates_queue):
+    def update_shared_model(self, gradient_updates_queue_actor_task,
+                            gradient_updates_queue_actor_machine,
+                            gradient_updates_queue_critic):
         """收到工作线程的梯度{信息传入队列}，更新全局网络梯度"""
         while True:
-            gradients = gradient_updates_queue.get()
+            gradients_actor_task = gradient_updates_queue_actor_task.get()
+            gradients_actor_machine = gradient_updates_queue_actor_machine.get()
+            gradients_critic = gradient_updates_queue_critic.get()
             with self.optimizer_lock:
                 # 更新工序策略网络梯度
-                self.actor_critic_optimizer.zero_grad()
-                for grads, params in zip(gradients, self.actor_critic.parameters()):
+                self.actor_task_optimizer.zero_grad()
+                for grads, params in zip(gradients_actor_task, self.actor_net_task.parameters()):
                     params._grad = grads  # maybe need to do grads.clone()  # 子线程梯度值传递给全局网络参数
-                self.actor_critic_optimizer.step()  # 依据传递的新的梯度值更新参数
+                self.actor_task_optimizer.step()  # 依据传递的新的梯度值更新参数
+                # 更新机器策略网络梯度
+                self.actor_machine_optimizer.zero_grad()
+                for grads, params in zip(gradients_actor_machine, self.actor_net_machine.parameters()):
+                    params._grad = grads  # maybe need to do grads.clone()  # 子线程梯度值传递给全局网络参数
+                self.actor_machine_optimizer.step()  # 依据传递的新的梯度值更新参数
+                # 更新全局评论家网络梯度
+                self.critic_optimizer.zero_grad()
+                for grads, params in zip(gradients_critic, self.critic_net.parameters()):
+                    params._grad = grads
+                self.critic_optimizer.step()  # 依据传递的新的梯度值更新参数
 
 class Actor_Critic_Worker(torch.multiprocessing.Process):
     """演员评论工作者将玩游戏的指定集数 """
@@ -212,9 +252,11 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
             self.critic_outputs = []  # 评论家输出的V值列表
             # 采样一条轨迹
             while not done:
-                action_task, action_task_log_prob = self.pick_action_and_log_prob(self.local_actor_task_model, state, epsilon_exploration)
+                action_task, action_task_log_prob = self.pick_action_and_log_prob(self.local_actor_task_model, state,
+                                                                                  epsilon_exploration)
                 state_add = np.append(state, action_task)  # 带选择的工序规则信息的状态
-                action_machine, action_machine_log_prob = self.pick_action_and_log_prob(self.local_actor_machine_model, state_add, epsilon_exploration)
+                action_machine, action_machine_log_prob = self.pick_action_and_log_prob(self.local_actor_machine_model,
+                                                                                        state_add, epsilon_exploration)
                 critic_outputs = self.get_critic_value(self.local_critic_model, state)
                 actions = np.array([action_task, action_machine])  # 二维离散动作
                 next_state, reward, done, _ = self.environment.step(actions)
