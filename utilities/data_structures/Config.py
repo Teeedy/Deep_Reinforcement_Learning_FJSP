@@ -19,7 +19,7 @@ class Config():
             "DA3C": {
                 "learning_rate": 0.001,
                 "discount_rate": 0.9,
-                "num_episodes_to_run": 1000,
+                "num_episodes_to_run": 6,
                 "gradient_clipping_norm": 5.0,
                 "clip_rewards": False,
                 "normalise_rewards": True,

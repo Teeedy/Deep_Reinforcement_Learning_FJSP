@@ -32,6 +32,7 @@ class SO_DFJSP_Environment(FJSP):
         self.observation_space = 12  # 观察的状态向量空间
         self.reward_sum = 0  # 累计回报
         # 工序和机器选择规则相关属性
+        self.order_object_list = []  # 未处理订单列表
         self.kind_task_delay_e_list = []  # 估计延期工序类型列表
         self.kind_task_delay_a_list = []  # 实际延期工序类型列表
         self.kind_task_delay_time_a = {}  # 工序类型实际延期时间
@@ -49,7 +50,8 @@ class SO_DFJSP_Environment(FJSP):
     def reset(self):
         """重置环境状态"""
         # 初始化FJSP类
-        print("剩余订单数", len(self.order_object_list))
+        self.order_object_list = [self.order_dict[s] for s in self.order_tuple]  # 未到达订单对象列表
+        # print("剩余订单数", len(self.order_object_list))
         self.reset_parameter()  # 初始化参数对象中的列表和字典
         self.reset_object_add(self.order_object_list[0])  # 新订单到达后更新各字典对象
         self.order_object_list.remove(self.order_object_list[0])  # 更新未到达订单对象列表
@@ -201,8 +203,8 @@ class SO_DFJSP_Environment(FJSP):
         # 判断是否移动时钟
         while len(self.kind_task_available_list) == 0:
             # 更新当前时间点
-            if len(self.order_object_list) > 0:
-                print("下个订单的到达时间", self.order_object_list[0].time_arrive)
+            # if len(self.order_object_list) > 0:
+            #    print("下个订单的到达时间", self.order_object_list[0].time_arrive)
             time_point_list = [self.machine_dict[m].time_end for m in self.machine_tuple
                                if self.machine_dict[m].time_end > self.step_time]
             self.step_time = min(time_point_list)
@@ -217,13 +219,13 @@ class SO_DFJSP_Environment(FJSP):
                         sorted(kind_task_object.job_now_list, key=lambda x: x.number)
             # 判断新订单是否到达
             if len(self.order_object_list) > 0 and self.order_object_list[0].time_arrive <= self.step_time:
-                print("____________未加工完时新订单到达____________")
+                # print("___________未加工完时新订单到达____________")
                 order_object = self.order_object_list[0]
                 self.order_object_list.remove(order_object)
                 self.reset_object_add(order_object)
                 self.order_arrive_time = order_object.time_arrive
             elif len(self.order_object_list) > 0 and sum(len(kind_object.job_unprocessed_list) for r, kind_object in self.kind_dict.items()) == 0:
-                print("*************直接移动到下一个时间点**************")
+                # print("**********直接移动到下一个时间点***********")
                 order_object = self.order_object_list[0]
                 self.order_object_list.remove(order_object)
                 self.reset_object_add(order_object)
@@ -259,10 +261,10 @@ class SO_DFJSP_Environment(FJSP):
         self.next_state = np.concatenate((np.array(self.observation_state), self.state_gap))  # 状态向量 [v(t), v(t) - v(t-1)]
         self.reward = self.compute_reward()  # 即时奖励
         self.reward_sum += self.reward  # 更新累计回报
-        print("reward：", self.reward)
-        print("state：", self.observation_state[-4:])
-        print("剩余工件估计延期时间：", self.delay_time_sum_e)
-        print("当前时间：", self.step_time)
+        # print("reward：", self.reward)
+        # print("state：", self.observation_state[-4:])
+        # print("剩余工件估计延期时间：", self.delay_time_sum_e)
+        # print("当前时间：", self.step_time)
         self.state = self.next_state
         return self.state, self.reward, self.done
 

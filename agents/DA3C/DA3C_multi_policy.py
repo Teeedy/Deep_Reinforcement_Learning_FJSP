@@ -1,5 +1,6 @@
 """
 双重异步优势演员评论家算法
+两个网络：评论家网络+双层动作网络
 """
 import copy
 import pickle
@@ -23,11 +24,10 @@ class TaskPolicyNet(nn.Module):
         super(TaskPolicyNet, self).__init__()
         self.name = "task_policy"
         # 定义工序策略网络输入层
-        self.layers_1 = nn.ModuleList([nn.Linear(input_size_1, hidden_size), nn.BatchNorm1d(hidden_size), nn.ReLU()])
+        self.layers_1 = nn.ModuleList([nn.Linear(input_size_1, hidden_size), nn.ReLU()])
         # 定义工序策略网络隐藏层
         for i in range(hidden_layer_1 - 1):
             self.layers_1.append(nn.Linear(hidden_size, hidden_size))
-            self.layers_1.append(nn.BatchNorm1d(hidden_size))
             self.layers_1.append(nn.ReLU())
         # 定义工序策略网络输出层
         self.layers_1.append(nn.Linear(hidden_size, output_size_1))
@@ -44,11 +44,10 @@ class MachinePolicyNet(nn.Module):
         super(MachinePolicyNet, self).__init__()
         self.name = "machine_policy"
         # 定义机器策略网络输入层
-        self.layers_2 = nn.ModuleList([nn.Linear(input_size_2, hidden_size), nn.BatchNorm1d(hidden_size), nn.ReLU()])
+        self.layers_2 = nn.ModuleList([nn.Linear(input_size_2, hidden_size), nn.ReLU()])
         # 定义机器策略网络隐藏层
         for i in range(hidden_layer_2 - 1):
             self.layers_2.append(nn.Linear(hidden_size, hidden_size))
-            self.layers_2.append(nn.BatchNorm1d(hidden_size))
             self.layers_2.append(nn.ReLU())
         # 定义机器策略网络输出层
         self.layers_2.append(nn.Linear(hidden_size, output_size_2))
@@ -64,11 +63,10 @@ class CriticNet(nn.Module):
     def __init__(self, input_size, hidden_size, hidden_layer, output_size):
         super(CriticNet, self).__init__()
         # 定义评论家网络输入层
-        self.layers = nn.ModuleList([nn.Linear(input_size, hidden_size), nn.BatchNorm1d(hidden_size), nn.ReLU()])
+        self.layers = nn.ModuleList([nn.Linear(input_size, hidden_size), nn.ReLU()])
         # 定义评论家网络隐藏层
         for i in range(hidden_layer - 1):
             self.layers.append(nn.Linear(hidden_size, hidden_size))
-            self.layers.append(nn.BatchNorm1d(hidden_size))
             self.layers.append(nn.ReLU())
         # 定义评论家网络输出层
         self.layers.append(nn.Linear(hidden_size, output_size))
@@ -96,9 +94,9 @@ class DA3C(Base_Agent, Config):
         # 初始化锁对象 用来更新全局网络参数
         self.optimizer_lock = None
         # 定义策略网络和评论家网络
-        self.actor_net_task = TaskPolicyNet(input_size_1=24, hidden_size=200, hidden_layer_1=3, output_size_1=6).to(self.device)
-        self.actor_net_machine = MachinePolicyNet(input_size_2=25, hidden_size=200, hidden_layer_2=3, output_size_2=4).to(self.device)
-        self.critic_net = CriticNet(input_size=24, hidden_size=200, hidden_layer=3, output_size=1).to(self.device)
+        self.actor_net_task = TaskPolicyNet(input_size_1=24, hidden_size=200, hidden_layer_1=3, output_size_1=6)
+        self.actor_net_machine = MachinePolicyNet(input_size_2=25, hidden_size=200, hidden_layer_2=3, output_size_2=4)
+        self.critic_net = CriticNet(input_size=24, hidden_size=200, hidden_layer=3, output_size=1)
         # 定义优化器
         self.actor_task_optimizer = SharedAdam(self.actor_net_task.parameters(), lr=self.learning_rate, eps=1e-4)
         self.actor_machine_optimizer = SharedAdam(self.actor_net_machine.parameters(), lr=self.learning_rate, eps=1e-4)
@@ -108,7 +106,7 @@ class DA3C(Base_Agent, Config):
         """生成新环境"""
         DDT = random.uniform(0.5, 1.5)
         M = random.randint(10, 20)
-        S = random.randint(10, 15)
+        S = random.randint(2, 2)
         return SO_DFJSP_Environment(DDT, M, S)
 
     def run_n_episodes(self):
@@ -145,7 +143,7 @@ class DA3C(Base_Agent, Config):
             processes.append(worker)
         for worker in processes:
             worker.join()  # 让子线程结束后主线程再结束
-        optimizer_worker.kill()  # 主线程退出
+        optimizer_worker.terminate()  # 主线程退出
         time_taken = time.time() - start
         self.save_actor_model(self.save_model)  # 保存训练好的策略网络
         return time_taken
@@ -237,12 +235,13 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
         """开启工作线程"""
         torch.set_num_threads(1)
         for ep_ix in range(self.episodes_to_run):
+            self.environment = self.generated_new_environment()
             with self.optimizer_lock:  # 锁定网络更新线程网络参数
                 Base_Agent.copy_model_over(self.actor_task_model, self.local_actor_task_model)
                 Base_Agent.copy_model_over(self.actor_machine_model, self.local_actor_machine_model)
                 Base_Agent.copy_model_over(self.critic_model, self.local_critic_model)
             epsilon_exploration = self.calculate_new_exploration()  # 计算新的探索参数
-            state = self.generated_new_environment().reset()  # 初始化状态
+            state = self.environment.reset()  # 初始化状态
             done = False
             self.episode_states = []  # 状态列表
             self.episode_actions = []  # 动作列表
@@ -259,7 +258,7 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
                                                                                         state_add, epsilon_exploration)
                 critic_outputs = self.get_critic_value(self.local_critic_model, state)
                 actions = np.array([action_task, action_machine])  # 二维离散动作
-                next_state, reward, done, _ = self.environment.step(actions)
+                next_state, reward, done = self.environment.step(actions)
                 self.episode_states.append(state)
                 self.episode_actions.append(actions)
                 self.episode_rewards.append(reward)
@@ -287,7 +286,7 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
 
     def pick_action_and_log_prob(self, policy, state, epsilon_exploration=None):
         """使用策略选择一个动作"""
-        state = torch.from_numpy(state).float().unsqueeze(0).cuda()  # 状态转为tensor类型
+        state = torch.from_numpy(state).float().unsqueeze(0)  # 状态转为tensor类型
         actor_output = policy.forward(state)
         if policy.name == "task_policy":
             action_size = self.actions_size[0]
@@ -300,19 +299,20 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
             if random.random() <= epsilon_exploration:
                 action = random.randint(0, action_size - 1)
             else:
-                action = action
+                action = action[0]
         action_log_prob = self.calculate_log_action_probability(action, action_distribution)
         return action, action_log_prob
 
     def get_critic_value(self, policy, state):
         """返回评论家网络值"""
-        state = torch.from_numpy(state).float().unsqueeze(0).cuda()
+        state = torch.from_numpy(state).float().unsqueeze(0)
         critic_output = policy.forward(state)
         return critic_output
 
-    def calculate_log_action_probability(self, actions, action_distribution):
+    def calculate_log_action_probability(self, action, action_distribution):
         """计算所选动作的log概率"""
-        policy_distribution_log_prob = action_distribution.log_prob(torch.Tensor([actions]))
+        print(action)
+        policy_distribution_log_prob = action_distribution.log_prob(torch.Tensor([action]))
         return policy_distribution_log_prob
 
     def calculate_total_loss(self):

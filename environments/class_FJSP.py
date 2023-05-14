@@ -141,7 +141,6 @@ class FJSP(Instance):
         self.kind_task_dict = {(r, j): Tasks(r, j) for r in self.kind_tuple for j in self.task_r_dict[r]}  # 工序类型对象字典
         self.order_dict = {s: Order(s, self.time_arrive_s_dict[s], self.time_delivery_s_dict[s], self.count_sr_dict[s])
                            for s in self.order_tuple}  # 对象订单字典
-        self.order_object_list = [self.order_dict[s] for s in self.order_tuple]  # 未到达订单对象列表
         self.kind_dict = {r: Kind(r) for r in self.kind_tuple}  # 工件类型对象字典
         self.machine_dict = {m: Machine(m) for m in self.machine_tuple}  # 机器对象字典
         self.task_dict = {}  # (r,n,j) 工序对象字典 订单到达更新
@@ -257,7 +256,7 @@ class FJSP(Instance):
         process_rate_rj_sum = {(r, j): sum(x[m, (r, j)] * self.process_rate_m_rj_dict[m][(r, j)]
                                            for m in self.machine_rj_dict[(r, j)]) for (r, j) in self.kind_task_tuple}
         fluid_makespan = max(fluid_number[(r, j)]/process_rate_rj_sum[(r, j)] for (r, j) in self.kind_task_tuple)
-        print("流体完工时间：", fluid_makespan)
+        # print("流体完工时间：", fluid_makespan)
         return x
 
     def update_fluid_parameter(self, x):
