@@ -17,9 +17,9 @@ class Config():
         """算法超参数"""
         parameters = {
             "DA3C": {
-                "learning_rate": 0.001,
+                "learning_rate": 0.0001,
                 "discount_rate": 0.9,
-                "num_episodes_to_run": 100,
+                "num_episodes_to_run": 1000,
                 "gradient_clipping_norm": 5.0,
                 "clip_rewards": False,
                 "normalise_rewards": True,

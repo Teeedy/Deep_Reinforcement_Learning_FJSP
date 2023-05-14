@@ -85,7 +85,7 @@ class DA3C(Base_Agent, Config):
         self.num_processes = multiprocessing.cpu_count()  # 电脑线程数量|四核八线程
         self.worker_processes = max(1, self.num_processes - 6)  # 启用线程数
         self.path = 'D:\Python project\Deep_Reinforcement_Learning_FJSP\data\generated'  # 测试算例的存储位置
-        self.file_name = 'DDT1.0_M15_S5'  # 测试算例的文件夹名字
+        self.file_name = 'DDT1.0_M15_S1'  # 测试算例的文件夹名字
         self.test_environment = SO_DFJSP_Environment(use_instance=False, path=self.path, file_name=self.file_name)  # 测试环境
         self.config = Config
         # 超参数
@@ -226,20 +226,20 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
         """返回新环境对象"""
         DDT = random.uniform(0.5, 1.5)
         M = random.randint(10, 20)
-        S = random.randint(5, 5)
+        S = random.randint(1, 1)
         return SO_DFJSP_Environment(use_instance=True, DDT=DDT, M=M, S=S)
 
     def run(self):
         """开启工作线程"""
         torch.set_num_threads(1)
         for ep_ix in range(self.episodes_to_run):
-            self.environment = self.generated_new_environment()  # 重新随机初始化
+            self.environment = self.test_environment  # 重新随机初始化
             with self.optimizer_lock:  # 锁定网络更新线程网络参数
                 Base_Agent.copy_model_over(self.actor_task_model, self.local_actor_task_model)
                 Base_Agent.copy_model_over(self.actor_machine_model, self.local_actor_machine_model)
                 Base_Agent.copy_model_over(self.critic_model, self.local_critic_model)
             epsilon_exploration = self.calculate_new_exploration()  # 计算新的探索参数
-            print("探索参数", epsilon_exploration)
+            # print("探索参数", epsilon_exploration)
             state = self.environment.reset()  # 初始化状态
             done = False
             self.episode_states = []  # 状态列表
@@ -251,10 +251,10 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
             # 采样一条轨迹
             while not done:
                 action_task, action_task_log_prob = self.pick_action_and_log_prob(self.local_actor_task_model, state,
-                                                                                  epsilon_exploration)
+                                                                                  epsilon_exploration=0)
                 state_add = np.append(state, action_task)  # 带选择的工序规则信息的状态
                 action_machine, action_machine_log_prob = self.pick_action_and_log_prob(self.local_actor_machine_model,
-                                                                                        state_add, epsilon_exploration)
+                                                                                        state_add, epsilon_exploration=0)
                 critic_outputs = self.get_critic_value(self.local_critic_model, state)
                 actions = np.array([action_task, action_machine])  # 二维离散动作
                 next_state, reward, done = self.environment.step(actions)
@@ -273,14 +273,14 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
             with self.counter.get_lock():
                 self.counter.value += 1
                 print("运行总步数：", self.counter.value)
-                if self.counter.value % 1 == 5:
+                if self.counter.value % 5 == 0:
                     state = self.test_environment.reset()
                     while not self.test_environment.done:
-                        action_task, action_task_log_prob = self.pick_action_and_log_prob(self.local_actor_task_model,
+                        action_task, action_task_log_prob = self.pick_action_and_log_prob(self.actor_task_model,
                                                                                           state, epsilon_exploration=0)
                         state_add = np.append(state, action_task)  # 带选择的工序规则信息的状态
                         action_machine, action_machine_log_prob = \
-                            self.pick_action_and_log_prob(self.local_actor_machine_model, state_add, epsilon_exploration=0)
+                            self.pick_action_and_log_prob(self.actor_machine_model, state_add, epsilon_exploration=0)
                         actions = np.array([action_task, action_machine])  # 二维离散动作
                         next_state, reward, done = self.test_environment.step(actions)
                         state = next_state
@@ -334,6 +334,9 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
         critic_loss, advantages = self.calculate_critic_loss_and_advantages(discounted_returns)  # 计算评论家损失和优势函数
         actor_task_loss = self.calculate_actor_loss(advantages, self.episode_log_action_task_probabilities)
         actor_machine_loss = self.calculate_actor_loss(advantages, self.episode_log_action_machine_probabilities)
+        print("评论家损失：", critic_loss)
+        print("工序策略网络损失：", actor_task_loss)
+        print("机器策略网络损失：", actor_machine_loss)
         return critic_loss, actor_task_loss, actor_machine_loss
 
     def calculate_discounted_returns(self):

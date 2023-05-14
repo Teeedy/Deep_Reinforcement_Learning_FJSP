@@ -25,29 +25,26 @@ class ActorCriticNet(nn.Module):
                  input_size_2, hidden_layer_2, output_size_2):
         super(ActorCriticNet, self).__init__()
         # 定义评论家网络输入层
-        self.layers = nn.ModuleList([nn.Linear(input_size, hidden_size), nn.BatchNorm1d(hidden_size), nn.ReLU()])
+        self.layers = nn.ModuleList([nn.Linear(input_size, hidden_size), nn.ReLU()])
         # 定义评论家网络隐藏层
         for i in range(hidden_layer - 1):
             self.layers.append(nn.Linear(hidden_size, hidden_size))
-            self.layers.append(nn.BatchNorm1d(hidden_size))
             self.layers.append(nn.ReLU())
         # 定义评论家网络输出层
         self.layers.append(nn.Linear(hidden_size, output_size))
         # 定义工序策略网络输入层
-        self.layers_1 = nn.ModuleList([nn.Linear(input_size_1, hidden_size), nn.BatchNorm1d(hidden_size), nn.ReLU()])
+        self.layers_1 = nn.ModuleList([nn.Linear(input_size_1, hidden_size), nn.ReLU()])
         # 定义工序策略网络隐藏层
         for i in range(hidden_layer_1 - 1):
             self.layers_1.append(nn.Linear(hidden_size, hidden_size))
-            self.layers_1.append(nn.BatchNorm1d(hidden_size))
             self.layers_1.append(nn.ReLU())
         # 定义工序策略网络输出层
         self.layers_1.append(nn.Linear(hidden_size, output_size_1))
         # 定义机器策略网络输入层
-        self.layers_2 = nn.ModuleList([nn.Linear(input_size_2, hidden_size), nn.BatchNorm1d(hidden_size), nn.ReLU()])
+        self.layers_2 = nn.ModuleList([nn.Linear(input_size_2, hidden_size), nn.ReLU()])
         # 定义机器策略网络隐藏层
         for i in range(hidden_layer_2 - 1):
             self.layers_2.append(nn.Linear(hidden_size, hidden_size))
-            self.layers_2.append(nn.BatchNorm1d(hidden_size))
             self.layers_2.append(nn.ReLU())
         # 定义机器策略网络输出层
         self.layers_2.append(nn.Linear(hidden_size, output_size_2))
@@ -69,7 +66,6 @@ class ActorCriticNet(nn.Module):
             x = layer(x)
         return x
 
-
 class DA3C(Base_Agent, Config):
     """Actor critic A3C algorithm"""
     agent_name = "A3C"
@@ -78,8 +74,9 @@ class DA3C(Base_Agent, Config):
         Config.__init__(self)  # 继承算法超参数类
         self.num_processes = multiprocessing.cpu_count()  # 电脑线程数量|四核八线程
         self.worker_processes = max(1, self.num_processes - 6)  # 启用线程数
-        self.environment = self.generated_new_environment()  # 初始环境
-        self.config = Config
+        self.path = 'D:\Python project\Deep_Reinforcement_Learning_FJSP\data\generated'  # 测试算例的存储位置
+        self.file_name = 'DDT1.0_M15_S1'  # 测试算例的文件夹名字
+        self.test_environment = SO_DFJSP_Environment(use_instance=False, path=self.path, file_name=self.file_name)  # 测试环境
         # 超参数
         self.learning_rate = self.hyper_parameters["DA3C"]["learning_rate"]  # 学习率
         self.discount_rate = self.hyper_parameters["DA3C"]["discount_rate"]  # 折扣率
@@ -92,13 +89,6 @@ class DA3C(Base_Agent, Config):
                                            input_size_1=24, hidden_layer_1=3, output_size_1=6,
                                            input_size_2=25, hidden_layer_2=3, output_size_2=4)
         self.actor_critic_optimizer = SharedAdam(self.actor_critic.parameters(), lr=self.learning_rate, eps=1e-4)
-
-    def generated_new_environment(self):
-        """生成新环境"""
-        DDT = random.uniform(0.5, 1.5)
-        M = random.randint(10, 20)
-        S = random.randint(10, 15)
-        return SO_DFJSP_Environment(DDT, M, S)
 
     def run_n_episodes(self):
         """运行环境n次直到完成，然后总结结果并保存模型(如果要求的话)"""
@@ -115,7 +105,7 @@ class DA3C(Base_Agent, Config):
         for process_num in range(self.worker_processes):
             worker = Actor_Critic_Worker(process_num, self.actor_critic, episode_number, self.optimizer_lock,
                                          self.actor_critic_optimizer, self.hyper_parameters, episodes_per_process,
-                                         copy.deepcopy(self.actor_critic), gradient_updates_queue)
+                                         copy.deepcopy(self.actor_critic), gradient_updates_queue, self.test_environment)
             worker.start()  # 启动各子线程run()函数
             processes.append(worker)
         for worker in processes:
@@ -147,17 +137,18 @@ class DA3C(Base_Agent, Config):
 class Actor_Critic_Worker(torch.multiprocessing.Process):
     """演员评论工作者将玩游戏的指定集数 """
     def __init__(self, worker_num, actor_critic, counter, optimizer_lock, actor_critic_optimizer, hyper_parameter,
-                 episodes_to_run, local_actor_critic_model, gradient_updates_queue):
+                 episodes_to_run, local_actor_critic_model, gradient_updates_queue, test_environment):
         torch.multiprocessing.Process.__init__(self)
-        self.environment = self.generated_new_environment()  # 初始化环境对象
-        self.action_types = self.environment.action_types  # 动作类型
+        self.test_environment = test_environment  # 测试环境
+        self.environment = None  # 初始化环境对象
+        self.action_types = self.test_environment.action_types  # 动作类型
         self.worker_num = worker_num  # 线程数
         self.gradient_clipping_norm = hyper_parameter["DA3C"]["gradient_clipping_norm"]  # 梯度裁剪值
         self.discount_rate = hyper_parameter["DA3C"]["discount_rate"]  # 折扣率
         self.exploration_worker_difference = hyper_parameter["DA3C"]["exploration_worker_difference"]
         self.epsilon_decay_denominator = hyper_parameter["DA3C"]["epsilon_decay_rate_denominator"]
         self.normalise_rewards = True  # 标准化回报
-        self.actions_size = self.environment.actions_size  # 二维离散动作[6, 4]
+        self.actions_size = self.test_environment.actions_size  # 二维离散动作[6, 4]
         self.actor_critic_model = actor_critic  # 工序策略网络
         self.local_actor_critic_model = local_actor_critic_model  # 局部工序策略网络
         self.local_actor_critic_optimizer = Adam(self.local_actor_critic_model.parameters(), lr=0.0, eps=1e-4)
@@ -178,17 +169,18 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
         """返回新环境对象"""
         DDT = random.uniform(0.5, 1.5)
         M = random.randint(10, 20)
-        S = random.randint(10, 15)
-        return SO_DFJSP_Environment(DDT, M, S)
+        S = random.randint(1, 1)
+        return SO_DFJSP_Environment(use_instance=True, DDT=DDT, M=M, S=S)
 
     def run(self):
         """开启工作线程"""
         torch.set_num_threads(1)
         for ep_ix in range(self.episodes_to_run):
+            self.environment = self.test_environment
             with self.optimizer_lock:  # 锁定网络更新线程网络参数
                 Base_Agent.copy_model_over(self.actor_critic_model, self.local_actor_critic_model)
             epsilon_exploration = self.calculate_new_exploration()  # 计算新的探索参数
-            state = self.generated_new_environment().reset()  # 初始化状态
+            state = self.environment.reset()  # 初始化状态
             done = False
             self.episode_states = []  # 状态列表
             self.episode_actions = []  # 动作列表
@@ -200,14 +192,13 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
             while not done:
                 action_task, action_task_log_prob = self.pick_action_and_log_prob(self.local_actor_critic_model, state,
                                                                                   epsilon_exploration, forward="task")
-                action_task = action_task.cpu().detach().numpy()
                 state_add = np.append(state, action_task)  # 带选择的工序规则信息的状态
                 action_machine, action_machine_log_prob = self.pick_action_and_log_prob(self.local_actor_critic_model,
                                                                                         state_add, epsilon_exploration,
                                                                                         forward="machine")
-                critic_outputs = self.get_critic_value(self.local_actor_critic_model, state)
                 actions = np.array([action_task, action_machine])  # 二维离散动作
-                next_state, reward, done, _ = self.environment.step(actions)
+                critic_outputs = self.get_critic_value(self.local_actor_critic_model, state)
+                next_state, reward, done = self.environment.step(actions)
                 self.episode_states.append(state)
                 self.episode_actions.append(actions)
                 self.episode_rewards.append(reward)
@@ -222,7 +213,22 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
             # 每间隔10个周期运行一次测试算例并动态绘制目标值曲线
             with self.counter.get_lock():
                 self.counter.value += 1
-                if self.counter.value % 10 == 0:
+                print("运行总步数：", self.counter.value)
+                if self.counter.value % 5 == 0:
+                    state = self.test_environment.reset()
+                    while not self.test_environment.done:
+                        action_task, action_task_log_prob \
+                            = self.pick_action_and_log_prob(self.local_actor_critic_model, state, epsilon_exploration,
+                                                            forward="task")
+                        state_add = np.append(state, action_task)  # 带选择的工序规则信息的状态
+                        action_machine, action_machine_log_prob \
+                            = self.pick_action_and_log_prob(self.local_actor_critic_model, state_add,
+                                                            epsilon_exploration, forward="machine")
+                        actions = np.array([action_task, action_machine])  # 二维离散动作
+                        next_state, reward, done = self.test_environment.step(actions)
+                        state = next_state
+                    print("累计回报:", self.test_environment.reward_sum)
+                    print("实际延期时间：", self.test_environment.delay_time_sum)
                     print("运行测试算例并更新目标值曲线")
 
     def calculate_new_exploration(self):
@@ -251,7 +257,7 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
             if random.random() <= epsilon_exploration:
                 action = random.randint(0, action_size - 1)
             else:
-                action = action
+                action = action[0]
         action_log_prob = self.calculate_log_action_probability(action, action_distribution)
         return action, action_log_prob
 
@@ -275,6 +281,7 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
         actor_task_loss = self.calculate_actor_loss(advantages, self.episode_log_action_task_probabilities)
         actor_machine_loss = self.calculate_actor_loss(advantages, self.episode_log_action_machine_probabilities)
         total_loss = critic_loss + actor_machine_loss + actor_task_loss
+        print("总损失：", total_loss)
         return total_loss
 
     def calculate_discounted_returns(self):

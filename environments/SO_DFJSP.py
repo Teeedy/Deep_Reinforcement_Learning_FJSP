@@ -45,7 +45,7 @@ class SO_DFJSP_Environment(FJSP):
         self.delay_time_sum_a = None  # 剩余工件实际总的延期时间
         self.delay_time_sum = 0  # 工件实际总延期时间
         # 输出订单到达时间和交期时间
-        print("成功定义环境类")
+        # print("成功定义环境类")
 
     def reset(self):
         """重置环境状态"""
@@ -248,8 +248,8 @@ class SO_DFJSP_Environment(FJSP):
             # 判断是否终止
             if len(self.order_object_list) == 0 and sum(len(kind_object.job_unprocessed_list) for r, kind_object in self.kind_dict.items()) == 0:
                 self.done = True
-                print("#############周期结束####################")
-                print(len(self.order_object_list))
+                # print("#############周期结束####################")
+                # print(len(self.order_object_list))
                 break
         # 提取新的状态、计算回报值、判断周期循环是否结束
         self.step_count += 1
