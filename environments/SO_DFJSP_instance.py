@@ -17,7 +17,7 @@ class Instance():
     问题特点
     文件命名方式 DDT0.5_M10_S1
     """
-    def __init__(self, DDT, M, S):
+    def __init__(self, DDT=None, M=None, S=None):
         # 问题特点
         self.DDT = DDT  # 交期紧急度
         self.machine_count = M  # 机器数

@@ -133,10 +133,13 @@ class Machine():
             return 0
 
 # 问题实例类
-class FJSP(Instance):
+class FJSP(Instance, Data):
     """柔性作业车间调度类"""
-    def __init__(self, DDT, M, S):
-        Instance.__init__(self, DDT, M, S)
+    def __init__(self, use_instance=True, **kwargs):
+        if use_instance:
+            Instance.__init__(self, **kwargs)
+        else:
+            Data.__init__(self, **kwargs)
         # 实例化工件类型、工件、工序类型、工序和机器对象字典
         self.kind_task_dict = {(r, j): Tasks(r, j) for r in self.kind_tuple for j in self.task_r_dict[r]}  # 工序类型对象字典
         self.order_dict = {s: Order(s, self.time_arrive_s_dict[s], self.time_delivery_s_dict[s], self.count_sr_dict[s])
@@ -291,5 +294,8 @@ if __name__ == '__main__':
     DDT = 1.0
     M = 15
     S = 4
-    fjsp_object = FJSP(DDT, M, S)
+    file_name = 'DDT1.0_M15_S10'
+    path = '../data/generated'
+    fjsp_object = FJSP(file_name=file_name, path=path)
+    print(fjsp_object.process_rate_m_rj_dict)
 """

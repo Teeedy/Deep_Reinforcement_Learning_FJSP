@@ -3,7 +3,7 @@ import copy
 import csv, os, re
 
 class Data():
-    def __init__(self, path, file_name):
+    def __init__(self, path=None, file_name=None):
         self.file_name = file_name  # 算例文件名
         self.csv_name_list = ['based_data.csv', 'process_data.csv', 'order_data.csv']
         self.path = path  # 路径

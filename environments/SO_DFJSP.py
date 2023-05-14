@@ -12,8 +12,8 @@ from environments.class_FJSP import FJSP
 class SO_DFJSP_Environment(FJSP):
     """单目标柔性作业车间调度环境"""
     environment_name = "single object fjsp"
-    def __init__(self, DDT, M, S):
-        FJSP.__init__(self, DDT, M, S)
+    def __init__(self, use_instance=True, **kwargs):
+        super().__init__(use_instance=use_instance, **kwargs)
         # 封装基本属性
         self.step_count = 0  # 决策步
         self.step_time = 0  # 时间点
@@ -359,8 +359,10 @@ if __name__ == '__main__':
     DDT = 1.0
     M = 15
     S = 10
+    file_name = 'DDT1.0_M15_S5'
+    path = '../data/generated'
     time_start = time.time()
-    env_object = SO_DFJSP_Environment(DDT, M, S)  # 定义环境对象
+    env_object = SO_DFJSP_Environment(use_instance=False, path=path, file_name=file_name)  # 定义环境对象
     state = env_object.reset()  # 初始化状态
     replay_list = []
     # 随机选择动作测试环境

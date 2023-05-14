@@ -3,7 +3,7 @@ class Config():
     """对象来保存代理/游戏的配置要求"""
     def __init__(self):
         self.seed = None  # 随机种子
-        self.environment = None  # 环境名称
+        self.test_environment = None  # 环境名称
         self.requirements_to_solve_game = None  # 配置需求
         self.num_episodes_to_run = None  # 运行周期
         self.file_to_save_data_results = None  # 保存结果数据的位置
@@ -19,7 +19,7 @@ class Config():
             "DA3C": {
                 "learning_rate": 0.001,
                 "discount_rate": 0.9,
-                "num_episodes_to_run": 6,
+                "num_episodes_to_run": 100,
                 "gradient_clipping_norm": 5.0,
                 "clip_rewards": False,
                 "normalise_rewards": True,
