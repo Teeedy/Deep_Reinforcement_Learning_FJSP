@@ -148,7 +148,7 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
         self.exploration_worker_difference = hyper_parameter["DA3C"]["exploration_worker_difference"]
         self.epsilon_decay_denominator = hyper_parameter["DA3C"]["epsilon_decay_rate_denominator"]
         self.normalise_rewards = True  # 标准化回报
-        self.actions_size = self.test_environment.actions_size  # 二维离散动作[6, 4]
+        self.actions_size = self.test_environment.action_size  # 二维离散动作[6, 4]
         self.actor_critic_model = actor_critic  # 工序策略网络
         self.local_actor_critic_model = local_actor_critic_model  # 局部工序策略网络
         self.local_actor_critic_optimizer = Adam(self.local_actor_critic_model.parameters(), lr=0.0, eps=1e-4)

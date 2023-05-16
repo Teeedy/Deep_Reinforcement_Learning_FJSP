@@ -3,7 +3,7 @@ class Config():
     """对象来保存代理/游戏的配置要求"""
     def __init__(self):
         self.seed = None  # 随机种子
-        self.test_environment = None  # 环境名称
+        self.environment_test = None  # 环境名称
         self.requirements_to_solve_game = None  # 配置需求
         self.num_episodes_to_run = None  # 运行周期
         self.file_to_save_data_results = None  # 保存结果数据的位置
@@ -17,9 +17,9 @@ class Config():
         """算法超参数"""
         parameters = {
             "DA3C": {
-                "learning_rate": 0.0001,
-                "discount_rate": 0.9,
-                "num_episodes_to_run": 1000,
+                "learning_rate": 0.0003,
+                "discount_rate": 0.99,
+                "num_episodes_to_run": 2000,
                 "gradient_clipping_norm": 5.0,
                 "clip_rewards": False,
                 "normalise_rewards": True,
@@ -35,6 +35,14 @@ class Config():
                 "learning_rate": 0.001,
                 "discount_rate": 0.9,
                 "gradient_clipping_norm": 5.0,
+            },
+            "DDQN": {
+                "learning_rate": 0.0003,
+                "discount_rate": 0.99,
+            },
+            "PPO": {
+                "learning_rate": 0.0003,
+                "discount_rate": 0.99,
             }}
 
         return parameters

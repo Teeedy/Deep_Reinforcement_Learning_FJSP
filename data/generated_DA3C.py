@@ -79,7 +79,7 @@ class Instance():
     def write_file(self):
         """写入csv文件"""
         os.makedirs(os.path.join('../data/generated', self.file_name), exist_ok=True)  # 新建实例文件夹
-        file_csv = {'based_data.csv': ['kind_count', 'machine_count', 'order_count'],
+        file_csv = {'based_data.csv': ['kind_count', 'machine_count', 'order_count', 'DDT'],
                     'process_data.csv': ['kind', 'task', 'machine_selectable', 'process_time'],
                     'order_data.csv': ['order', 'time_arrive', 'time_delivery', 'kind_number']}
 
@@ -90,7 +90,7 @@ class Instance():
                 writer.writerow(header)
                 rows = []  # 初始化写入数据
                 if csv_name == 'based_data.csv':
-                    rows.append([self.kind_count, self.machine_count, self.order_count])
+                    rows.append([self.kind_count, self.machine_count, self.order_count, self.DDT])
                 elif csv_name == 'process_data.csv':
                     for r in self.kind_tuple:
                         for j in self.task_r_dict[r]:
@@ -102,16 +102,17 @@ class Instance():
                 writer.writerows(rows)
         print("写入完成")
 
-# 初始化算例集参数
-DDT_list = [0.5, 1.0, 1.5]
-machine_count_list = [10, 15, 20]
-order_count_list = [1, 3, 5]
-file_name_list = []
-# 生成各实例文件
-for DDT in DDT_list:
-    for M in machine_count_list:
-        for S in order_count_list:
-            instance_object = Instance(DDT, M, S)
-            instance_object.write_file()
-            file_name_list.append(instance_object.file_name)
-print(file_name_list)
+if __name__ == '__main__':
+    # 初始化算例集参数
+    DDT_list = [0.5, 1.0, 1.5]
+    machine_count_list = [10, 15, 20]
+    order_count_list = [1, 2, 3, 4, 5]
+    file_name_list = []
+    # 生成各实例文件
+    for DDT in DDT_list:
+        for M in machine_count_list:
+            for S in order_count_list:
+                instance_object = Instance(DDT, M, S)
+                instance_object.write_file()
+                file_name_list.append(instance_object.file_name)
+    print(file_name_list)

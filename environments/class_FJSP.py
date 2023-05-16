@@ -25,9 +25,10 @@ class Kind():
         self.kind = r
         self.job_arrive_list = []  # 已经到达的工件对象列表
         self.job_unprocessed_list = []  # 未加工完成的工件对象列表
+
+    """该类型工件已到达工件数:下一阶段的工件n起始编号"""
     @property
     def number_start(self):
-        """该类型工件已到达工件数:下一阶段的工件n其实编号"""
         return len(self.job_arrive_list)
 
 class Tasks(Kind):
@@ -36,6 +37,7 @@ class Tasks(Kind):
         Kind.__init__(self, r)  # 调用父类的构函
         # 基本属性
         self.task = j  # 所属工序
+        self.task_remain = None  # 后续工序数
         self.machine_tuple = None  # 可选加工机器编号
         # 附加属性
         self.job_now_list = []  # 处于该工序段的工件对象列表
@@ -52,17 +54,21 @@ class Tasks(Kind):
         self.fluid_unprocessed_number_start = None  # 订单到达时刻未被加工的流体数
 
     # 计算属性
+    """流体gap_rj/Q的比值"""
+    @property
+    def gap_rate(self):
+        return (len(self.task_unprocessed_list) - self.fluid_unprocessed_number)/self.fluid_unprocessed_number_start
+    """流体gap_rj值"""
     @property
     def gap(self):
-        """流体gap_rj值"""
-        return (len(self.task_unprocessed_list) - self.fluid_unprocessed_number)/self.fluid_unprocessed_number_start
+        return len(self.task_unprocessed_list) - self.fluid_unprocessed_number
+    """o_rj完成率"""
     @property
     def finish_rate(self):
-        """o_rj完成率"""
         return len(self.task_processed_list)/(len(self.task_unprocessed_list) + len(self.task_processed_list))
+    """工序rj阶段工件的交期最小值"""
     @property
     def due_date_min(self):
-        """工序rj阶段工件的交期最小值"""
         if len(self.job_now_list) > 0:
             min_due_date = min(job_object.due_date for job_object in self.job_now_list)
         else:
@@ -89,9 +95,10 @@ class Task(Tasks, Job):
         self.machine = None  # 选择的机器
         self.time_end = None  # 加工结束时间
         self.time_begin = None  # 加工开始时间
+
+    """加工耗时"""
     @property
     def time_cost(self):
-        """加工耗时"""
         return self.time_end - self.time_begin
 
 class Machine():
@@ -116,21 +123,18 @@ class Machine():
     def utilize_rate(self, step_time):
         """利用率"""
         return sum([task.time_cost for task in self.task_list])/max(step_time, self.time_end)
+
+    """计算gap_mrj值"""
     @property
     def gap_rj_dict(self):
-        """计算gap_mrj值"""
         gap_rj_dict = {}
-        for (r, j) in self.fluid_kind_task_list:
-            gap_rj_dict[(r, j)] = (self.unprocessed_rj_dict[(r, j)] -
-                                   self.fluid_unprocessed_rj_dict[(r, j)])/self.fluid_unprocessed_rj_arrival_dict[(r, j)]
+        for (r, j) in self.kind_task_tuple:
+            gap_rj_dict[(r, j)] = self.unprocessed_rj_dict[(r, j)] - self.fluid_unprocessed_rj_dict[(r, j)]
         return gap_rj_dict
+    """计算gap_m_rj的均值"""
     @property
     def gap_ave(self):
-        """计算gap_m_rj的均值"""
-        if len(self.fluid_kind_task_list) > 0:
-            return sum(self.gap_rj_dict[(r, j)] for (r, j) in self.fluid_kind_task_list)/len(self.fluid_kind_task_list)
-        else:
-            return 0
+        return sum(self.gap_rj_dict[(r, j)] for (r, j) in self.kind_task_tuple)/len(self.kind_task_tuple)
 
 # 问题实例类
 class FJSP(Instance, Data):
@@ -214,10 +218,10 @@ class FJSP(Instance, Data):
                     self.kind_task_dict[(r, j)].task_unprocessed_list.append(task_object)
                     self.task_dict[(r, n, j)] = task_object  # 加入工序字典
         # 初始化流体属性
-        for (r, j), task_kind_object in self.kind_task_dict.items():
-            task_kind_object.fluid_number = len(task_kind_object.job_now_list)  # 处于该工序段的流体数量
-            task_kind_object.fluid_unprocessed_number = len(task_kind_object.task_unprocessed_list)  # 未被加工的流体数
-            task_kind_object.fluid_unprocessed_number_start = len(task_kind_object.task_unprocessed_list)  # 订单到达时刻未被加工的流体数量
+        for (r, j), kind_task_object in self.kind_task_dict.items():
+            kind_task_object.fluid_number = len(kind_task_object.job_now_list)  # 处于该工序段的流体数量
+            kind_task_object.fluid_unprocessed_number = len(kind_task_object.task_unprocessed_list)  # 未被加工的流体数
+            kind_task_object.fluid_unprocessed_number_start = len(kind_task_object.task_unprocessed_list)  # 订单到达时刻未被加工的流体数量
         # 求解流体模型更新流体模型属性
         x = self.fluid_model()
         # 初始化流体属性
@@ -256,28 +260,28 @@ class FJSP(Instance, Data):
         solution = model.solve()
         x = solution.get_value_dict(X)
         # 输出流体完工时间
-        process_rate_rj_sum = {(r, j): sum(x[m, (r, j)] * self.process_rate_m_rj_dict[m][(r, j)]
-                                           for m in self.machine_rj_dict[(r, j)]) for (r, j) in self.kind_task_tuple}
-        fluid_makespan = max(fluid_number[(r, j)]/process_rate_rj_sum[(r, j)] for (r, j) in self.kind_task_tuple)
+        # process_rate_rj_sum = {(r, j): sum(x[m, (r, j)] * self.process_rate_m_rj_dict[m][(r, j)]
+        #                                    for m in self.machine_rj_dict[(r, j)]) for (r, j) in self.kind_task_tuple}
+        # fluid_makespan = max(fluid_number[(r, j)]/process_rate_rj_sum[(r, j)] for (r, j) in self.kind_task_tuple)
         # print("流体完工时间：", fluid_makespan)
         return x
 
     def update_fluid_parameter(self, x):
         """基于流体解更新流体参数"""
         for (m, (r, j)), rate in x.items():
+            machine_object = self.machine_dict[m]
+            kind_task_object = self.kind_task_dict[(r, j)]
+            machine_object.time_ratio_rj_dict[(r, j)] = rate  # 流体解中分配给各工序类型的时间比例
+            kind_task_object.fluid_process_rate_m_dict[m] = rate*self.process_rate_m_rj_dict[m][(r, j)]
+            machine_object.fluid_process_rate_rj_dict[(r, j)] = rate*self.process_rate_m_rj_dict[m][(r, j)]
             if rate != 0:
-                machine_object = self.machine_dict[m]
-                kind_task_object = self.kind_task_dict[(r, j)]
                 machine_object.fluid_kind_task_list.append((r, j))
                 kind_task_object.fluid_machine_list.append(m)
-                machine_object.time_ratio_rj_dict[(r, j)] = rate  # 流体解中分配给各工序类型的时间比例
-                kind_task_object.fluid_process_rate_m_dict[m] = rate*self.process_rate_m_rj_dict[m][(r, j)]
-                machine_object.fluid_process_rate_rj_dict[(r, j)] = rate*self.process_rate_m_rj_dict[m][(r, j)]
         for (r, j), kind_task_object in self.kind_task_dict.items():
-            kind_task_object.fluid_rate_sum = sum(kind_task_object.fluid_process_rate_m_dict.values())
-            kind_task_object.fluid_time_sum = 1/kind_task_object.fluid_rate_sum
+            kind_task_object.fluid_rate_sum = sum(kind_task_object.fluid_process_rate_m_dict.values())  # 工序类型处理速率
+            kind_task_object.fluid_time_sum = 1/kind_task_object.fluid_rate_sum  # 工序类型的加工时间
         for m, machine_object in self.machine_dict.items():
-            for (r, j) in machine_object.fluid_kind_task_list:
+            for (r, j) in machine_object.kind_task_tuple:  # 添加除流体模型中可选工序类型外的工序
                 kind_task_object = self.kind_task_dict[(r, j)]
                 # 订单到达时刻未被m加工的各工序类型数量
                 machine_object.fluid_unprocessed_rj_arrival_dict[(r, j)] = \
@@ -294,7 +298,7 @@ if __name__ == '__main__':
     DDT = 1.0
     M = 15
     S = 4
-    file_name = 'DDT1.0_M15_S10'
+    file_name = 'DDT1.0_M15_S1'
     path = '../data/generated'
     fjsp_object = FJSP(file_name=file_name, path=path)
     print(fjsp_object.process_rate_m_rj_dict)
