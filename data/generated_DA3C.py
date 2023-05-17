@@ -106,7 +106,7 @@ if __name__ == '__main__':
     # 初始化算例集参数
     DDT_list = [0.5, 1.0, 1.5]
     machine_count_list = [10, 15, 20]
-    order_count_list = [1, 2, 3, 4, 5]
+    order_count_list = [1, 3, 5]
     file_name_list = []
     # 生成各实例文件
     for DDT in DDT_list:

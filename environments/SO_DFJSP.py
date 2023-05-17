@@ -391,7 +391,7 @@ if __name__ == '__main__':
     DDT = 1.0
     M = 15
     S = 10
-    file_name = 'DDT1.0_M15_S3'  # s3-due = 8780/10126/30465 s1-13/18/56
+    file_name = 'DDT1.0_M15_S1'
     path = '../data/generated'
     time_start = time.time()
     env_object = SO_DFJSP_Environment(use_instance=False, path=path, file_name=file_name)  # 定义环境对象
@@ -400,7 +400,7 @@ if __name__ == '__main__':
     # 随机选择动作测试环境
     while not env_object.done:
         # action = (random.choice([0, 1, 2, 3, 4, 5]), random.choice([0, 1, 2, 3, 4]))
-        action = [2, 0]
+        action = [2, 1]
         next_state, reward, done = env_object.step(action)
         replay_list.append([state, action, next_state, reward, done])
         state = next_state

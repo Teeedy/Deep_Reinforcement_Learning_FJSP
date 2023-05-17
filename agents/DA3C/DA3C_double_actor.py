@@ -21,7 +21,7 @@ from visdom import Visdom
 # 监控训练过程
 vis = Visdom()
 win = 'double_policy'
-title = 'The total delay time'
+title = 'Double policy'
 vis.line(X=[0], Y=[0], win=win, opts=dict(title=title, xlabel='epoch', ylable='total_delay_time',
                                           font=dict(family='Times New Roman')))
 
