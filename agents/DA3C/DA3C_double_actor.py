@@ -3,7 +3,6 @@
 三个网络：工序策略网络+机器策略网络+评论家网络
 """
 import copy
-import pickle
 import random
 import time
 import numpy as np
@@ -20,10 +19,11 @@ from torch import nn
 from visdom import Visdom
 
 # 监控训练过程
-vis = Visdom(env='DA3C')
-win = 'The_training_process'
-title = 'total_delay_time'
-vis.line(X=[0], Y=[0], win=win, opts=dict(title=title, xlabel='epoch', ylable='total_delay_time'))
+vis = Visdom()
+win = 'double_policy'
+title = 'The total delay time'
+vis.line(X=[0], Y=[0], win=win, opts=dict(title=title, xlabel='epoch', ylable='total_delay_time',
+                                          font=dict(family='Times New Roman')))
 
 # 构建工序策略网络类
 class TaskPolicyNet(nn.Module):
@@ -90,7 +90,7 @@ class DA3C(Base_Agent, Config):
         Base_Agent.__init__(self)  # 继承基础智能体类
         Config.__init__(self)  # 继承算法超参数类
         self.num_processes = multiprocessing.cpu_count()  # 电脑线程数量|四核八线程
-        self.worker_processes = max(1, self.num_processes - 6)  # 启用线程数
+        self.worker_processes = max(1, self.num_processes - 5)  # 启用线程数
         self.path = 'D:\Python project\Deep_Reinforcement_Learning_FJSP\data\generated'  # 测试算例的存储位置
         self.file_name = 'DDT1.0_M15_S3'  # 测试算例的文件夹名字
         self.environment_test = SO_DFJSP_Environment(use_instance=False, path=self.path, file_name=self.file_name)  # 测试环境
@@ -103,9 +103,9 @@ class DA3C(Base_Agent, Config):
         # 初始化锁对象 用来更新全局网络参数
         self.optimizer_lock = None
         # 定义策略网络和评论家网络
-        self.actor_net_task = TaskPolicyNet(input_size_1=28, hidden_size=200, hidden_layer_1=3, output_size_1=6)
-        self.actor_net_machine = MachinePolicyNet(input_size_2=29, hidden_size=200, hidden_layer_2=3, output_size_2=4)
-        self.critic_net = CriticNet(input_size=28, hidden_size=200, hidden_layer=3, output_size=1)
+        self.actor_net_task = TaskPolicyNet(input_size_1=20, hidden_size=200, hidden_layer_1=3, output_size_1=6)
+        self.actor_net_machine = MachinePolicyNet(input_size_2=21, hidden_size=200, hidden_layer_2=3, output_size_2=5)
+        self.critic_net = CriticNet(input_size=20, hidden_size=200, hidden_layer=3, output_size=1)
         # 定义优化器
         self.actor_task_optimizer = SharedAdam(self.actor_net_task.parameters(), lr=self.learning_rate, eps=1e-4)
         self.actor_machine_optimizer = SharedAdam(self.actor_net_machine.parameters(), lr=self.learning_rate, eps=1e-4)
@@ -187,7 +187,7 @@ class DA3C(Base_Agent, Config):
                 for grads, params in zip(gradients_critic, self.critic_net.parameters()):
                     params._grad = grads
                 self.critic_optimizer.step()  # 依据传递的新的梯度值更新参数
-                print("******************更新全局网络梯度值**********************")
+                # print("******************更新全局网络梯度值**********************")
 
 class Actor_Critic_Worker(torch.multiprocessing.Process):
     """演员评论工作者将玩游戏的指定集数 """
@@ -238,7 +238,7 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
         """返回新环境对象"""
         DDT = random.uniform(0.5, 1.5)
         M = random.randint(10, 20)
-        S = random.randint(3, 3)
+        S = random.randint(2, 6)
         return SO_DFJSP_Environment(use_instance=True, DDT=DDT, M=M, S=S)
 
     def run(self):
@@ -251,7 +251,6 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
                 Base_Agent.copy_model_over(self.actor_machine_model, self.local_actor_machine_model)
                 Base_Agent.copy_model_over(self.critic_model, self.local_critic_model)
             epsilon_exploration = self.calculate_new_exploration()  # 计算新的探索参数
-            # print("探索参数", epsilon_exploration)
             state = self.environment.reset()  # 初始化状态
             done = False
             self.episode_states = []  # 状态列表
@@ -281,12 +280,11 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
             critic_loss, actor_task_loss, actor_machine_loss = self.calculate_total_loss()
             self.put_gradients_in_queue(critic_loss, actor_task_loss, actor_machine_loss)
             self.episode_number += 1
-            print("总的延期时间：", self.environment.delay_time_sum)
+            vis.line(X=[self.counter.value], Y=[self.environment.delay_time_sum], win=win, update='append')
             # 每间隔10个周期运行一次测试算例并动态绘制目标值曲线
             with self.counter.get_lock():
                 self.counter.value += 1
                 print("运行总步数：", self.counter.value)
-                vis.line(X=[self.counter.value], Y=[self.environment.delay_time_sum], win=win, update='append')
                 # if self.counter.value % 1 == 0:
                 #     state = self.environment_test.reset()
                 #     while not self.environment_test.done:
@@ -359,9 +357,6 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
         critic_loss, advantages = self.calculate_critic_loss_and_advantages(discounted_returns)  # 计算评论家损失和优势函数
         actor_task_loss = self.calculate_actor_loss(advantages, self.episode_log_action_task_probabilities)
         actor_machine_loss = self.calculate_actor_loss(advantages, self.episode_log_action_machine_probabilities)
-        # print("评论家损失：", critic_loss)
-        # print("工序策略网络损失：", actor_task_loss)
-        # print("机器策略网络损失：", actor_machine_loss)
         return critic_loss, actor_task_loss, actor_machine_loss
 
     def calculate_discounted_returns(self):

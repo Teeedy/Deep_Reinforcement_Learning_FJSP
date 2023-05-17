@@ -45,8 +45,9 @@ class SO_DFJSP_Environment(FJSP):
         # 回报计算相关属性
         self.delay_time_sum_last = 0  # 工件上一步实际总延期时间
         self.delay_time_sum = 0  # 当前时间步工件实际总延期时间
-        self.delay_time_sum_processed = 0  # 已完工工件的总延期时间
-        self.delay_time_sum_unprocessed = 0  # 未完工工件的总延期时间
+        self.delay_time_sum_processed = 0  # 已完工工件的实际总延期时间
+        self.delay_time_sum_unprocessed = 0  # 未完工工件的实际总延期时间
+        self.delay_time_sum_unprocessed_last = 0  # 上一时间步未完工工件的实际总延期时间
         self.gap_ave_value_last = 0  # 当前时间步的工序类型gap均值
         # print("成功定义环境类")
 
@@ -61,6 +62,7 @@ class SO_DFJSP_Environment(FJSP):
         self.delay_time_sum = 0  # 当前时间步工件实际总延期时间
         self.delay_time_sum_processed = 0  # 已完工工件的总延期时间
         self.delay_time_sum_unprocessed = 0  # 未完工工件的总延期时间
+        self.delay_time_sum_unprocessed_last = 0
         self.reward_sum = 0  # 累计回报
         self.gap_ave_value_last = 0
         # 重置时间步和当前时间点
@@ -107,7 +109,7 @@ class SO_DFJSP_Environment(FJSP):
         delay_job_number_a = 0  # 实际延迟工件总数
         delay_job_number_e = 0  # 估计延迟工件总数
         job_number = 0  # 剩余工件总数
-        self.delay_time_sum_unprocessed = 0
+        self.delay_time_sum_unprocessed = 0  # 剩余工件的实际延期时间
         self.kind_task_delay_e_list = []  # 估计延期工序类型列表
         self.kind_task_delay_a_list = []  # 实际延期工序类型列表
         # time_start_point = max(self.ct_m_ave, self.step_time)  # 估计开始时间点
@@ -251,13 +253,14 @@ class SO_DFJSP_Environment(FJSP):
         # 提取新的状态、计算回报值、判断周期循环是否结束
         self.step_count += 1
         self.last_observation_state = self.observation_state  # 上一步观察到的状态 v(t-1)
+        self.delay_time_sum_unprocessed_last = self.delay_time_sum_unprocessed  # 更新上一时间步未完工工件的实际总延期时间
         # 初始化初始时间步
         self.observation_state = self.state_extract()  # 当前时间步的状态 v(t)
         self.state_gap = np.array(self.observation_state) - np.array(self.last_observation_state)
         self.next_state = np.concatenate((np.array(self.observation_state), self.state_gap))
         self.delay_time_sum = self.delay_time_sum_processed + self.delay_time_sum_unprocessed  # 实际总延期时间
         self.reward = self.compute_reward()  # 即时奖励
-        print("即时回报值：", self.reward)
+        # print("即时回报值：", self.reward)
         self.reward_sum += self.reward  # 更新累计回报
         self.delay_time_sum_last = self.delay_time_sum  # 更新上一时间步实际总的延期时间
         self.state = self.next_state
@@ -322,11 +325,25 @@ class SO_DFJSP_Environment(FJSP):
 
     def compute_reward(self):
         """回报函数的选择"""
-        function_selected = 1  # 选择的回报函数
+        function_selected = 3  # 选择的回报函数
         if function_selected == 1:  # 根据相邻状态实际延期时间差值的回报函数
             return -(self.delay_time_sum - self.delay_time_sum_last)
         elif function_selected == 2:  # 根据gap_ave差值的回报函数
             return - (self.gap_ave_value - self.gap_ave_value_last)
+        elif function_selected == 3:
+            if self.delay_time_sum_unprocessed < self.delay_time_sum_unprocessed_last:
+                reward_1 = 1
+            elif self.delay_time_sum_unprocessed == self.delay_time_sum_unprocessed_last:
+                reward_1 = 0
+            else:
+                reward_1 = -1
+            if self.gap_ave_value < self.gap_ave_value_last:
+                reward_2 = 1
+            elif self.gap_ave_value == self.gap_ave_value_last:
+                reward_2 = 0
+            else:
+                reward_2 = -1
+            return reward_1 + reward_2
         else:
             raise MyError("未定义该回报函数")
 
@@ -374,7 +391,7 @@ if __name__ == '__main__':
     DDT = 1.0
     M = 15
     S = 10
-    file_name = 'DDT1.0_M15_S1'  # s3-due = 8780/10126/30465 s1-13/18/56
+    file_name = 'DDT1.0_M15_S3'  # s3-due = 8780/10126/30465 s1-13/18/56
     path = '../data/generated'
     time_start = time.time()
     env_object = SO_DFJSP_Environment(use_instance=False, path=path, file_name=file_name)  # 定义环境对象
@@ -382,8 +399,8 @@ if __name__ == '__main__':
     replay_list = []
     # 随机选择动作测试环境
     while not env_object.done:
-        action = (random.choice([0, 1, 2, 3, 4, 5]), random.choice([0, 1, 2, 3, 4]))
-        # action = [2, 0]
+        # action = (random.choice([0, 1, 2, 3, 4, 5]), random.choice([0, 1, 2, 3, 4]))
+        action = [2, 0]
         next_state, reward, done = env_object.step(action)
         replay_list.append([state, action, next_state, reward, done])
         state = next_state
