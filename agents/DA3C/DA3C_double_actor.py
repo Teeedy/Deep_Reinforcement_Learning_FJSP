@@ -19,9 +19,10 @@ from torch import nn
 from visdom import Visdom
 
 # 监控训练过程
+window_name = 'Double Actor state(1)+action()+reward(5)'
 vis = Visdom()
-win = 'double_policy'
-title = 'Double policy'
+win = window_name
+title = window_name
 vis.line(X=[0], Y=[0], win=win, opts=dict(title=title, xlabel='epoch', ylable='total_delay_time',
                                           font=dict(family='Times New Roman')))
 
@@ -238,14 +239,15 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
         """返回新环境对象"""
         DDT = random.uniform(0.5, 1.5)
         M = random.randint(10, 20)
-        S = random.randint(2, 6)
+        S = random.randint(1, 5)
         return SO_DFJSP_Environment(use_instance=True, DDT=DDT, M=M, S=S)
 
     def run(self):
         """开启工作线程"""
         torch.set_num_threads(1)
         for ep_ix in range(self.episodes_to_run):
-            self.environment = self.environment_test  # 重新随机初始化
+            # self.environment = self.generated_new_environment()  # 重新随机初始化
+            self.environment = self.environment_test  # 用测试算例训练
             with self.optimizer_lock:  # 锁定网络更新线程网络参数
                 Base_Agent.copy_model_over(self.actor_task_model, self.local_actor_task_model)
                 Base_Agent.copy_model_over(self.actor_machine_model, self.local_actor_machine_model)
@@ -259,6 +261,8 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
             self.episode_log_action_task_probabilities = []  # 工序策略网络动作log概率列表
             self.episode_log_action_machine_probabilities = []  # 机器策略网络动作log概率列表
             self.critic_outputs = []  # 评论家输出的V值列表
+            task_action_ratio = [0 for i in range(self.actions_size[0])]  # 每个工序规则的比例
+            machine_action_ratio = [0 for i in range(self.actions_size[1])]  # 每个机器规则的比例
             # 采样一条轨迹
             while not done:
                 action_task, action_task_log_prob = self.pick_action_and_log_prob(self.local_actor_task_model, state,
@@ -268,6 +272,8 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
                                                                                         state_add, epsilon_exploration=0)
                 critic_outputs = self.get_critic_value(self.local_critic_model, state)
                 actions = np.array([action_task, action_machine])  # 二维离散动作
+                task_action_ratio[actions[0]] += 1
+                machine_action_ratio[actions[1]] += 1
                 next_state, reward, done = self.environment.step(actions)
                 self.episode_states.append(state)
                 self.episode_actions.append(actions)
@@ -281,21 +287,23 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
             self.put_gradients_in_queue(critic_loss, actor_task_loss, actor_machine_loss)
             self.episode_number += 1
             vis.line(X=[self.counter.value], Y=[self.environment.delay_time_sum], win=win, update='append')
+            print("工序各规则比例：", [task_action_ratio[i]/sum(task_action_ratio) for i in range(len(task_action_ratio))])
+            print("机器各规则比例：", [machine_action_ratio[i]/sum(machine_action_ratio) for i in range(len(machine_action_ratio))])
+            print("运行总步数：", self.counter.value)
             # 每间隔10个周期运行一次测试算例并动态绘制目标值曲线
             with self.counter.get_lock():
                 self.counter.value += 1
-                print("运行总步数：", self.counter.value)
-                # if self.counter.value % 1 == 0:
-                #     state = self.environment_test.reset()
-                #     while not self.environment_test.done:
-                #         action_task = self.pick_action(self.actor_task_model, state)
-                #         state_add = np.append(state, action_task)  # 带选择的工序规则信息的状态
-                #         action_machine = \
-                #             self.pick_action(self.actor_machine_model, state_add)
-                #         actions = np.array([action_task, action_machine])  # 二维离散动作
-                #         next_state, reward, done = self.environment_test.step(actions)
-                #         state = next_state
-                #     print("测试算例总的延期时间：", self.environment_test.delay_time_sum)
+                # state = self.environment_test.reset()
+                # while not self.environment_test.done:
+                #     action_task = self.pick_action(self.actor_task_model, state)
+                #     state_add = np.append(state, action_task)  # 带选择的工序规则信息的状态
+                #     action_machine = \
+                #         self.pick_action(self.actor_machine_model, state_add)
+                #     actions = np.array([action_task, action_machine])  # 二维离散动作
+                #     next_state, reward, done = self.environment_test.step(actions)
+                #     state = next_state
+                # vis.line(X=[self.counter.value], Y=[self.environment_test.delay_time_sum], win=win, update='append')
+                # print("测试算例总的延期时间：", self.environment_test.delay_time_sum)
 
     def calculate_new_exploration(self):
         """计算新的勘探参数。它在当前的上下3X范围内随机选取一个点"""

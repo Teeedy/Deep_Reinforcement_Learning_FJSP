@@ -51,9 +51,11 @@ class MO_FJSSP_Environment(SO_DFJSP_Environment):
         M = self.machine_count  # 机器数
         R = self.kind_count  # 工件类型数
         N_ave = sum(self.order_object.count_kind[r] for r in self.kind_tuple)/self.kind_count  # 各工件类型的工件数均值
-        N_std = math.sqrt(sum(math.pow(self.order_object.count_kind[r] - N_ave, 2) for r in self.kind_tuple)/self.kind_count)
+        N_std = math.sqrt(sum(math.pow(self.order_object.count_kind[r] - N_ave, 2)
+                              for r in self.kind_tuple)/self.kind_count)  # 各工件类型的工件数标准差
         J_ave = sum(len(self.task_r_dict[r]) for r in self.kind_tuple)/self.kind_count  # 工件类型的工序数均值
-        J_std = math.sqrt(sum(math.pow(len(self.task_r_dict[r]) - J_ave, 2) for r in self.kind_tuple)/self.kind_count)
+        J_std = math.sqrt(sum(math.pow(len(self.task_r_dict[r]) - J_ave, 2)
+                              for r in self.kind_tuple)/self.kind_count)
         return np.array([M, R, N_ave, N_std, J_ave, J_std])
 
     def state_extract(self):

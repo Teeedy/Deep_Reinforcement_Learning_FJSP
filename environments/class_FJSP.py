@@ -229,7 +229,6 @@ class FJSP(Instance, Data):
         # 基于流体解更新流体属性
         self.update_fluid_parameter(x)
 
-
     def fluid_model(self):
         """
         最小化最大完工时间目标流体模型求解
@@ -255,15 +254,15 @@ class FJSP(Instance, Data):
                               for m in self.machine_tuple)
         # 解的可行性约束
         model.add_constraints(process_rate_rj_sum[(r, j)] >= process_rate_rj_sum[(r, j+1)] for r in self.kind_tuple
-                              for j in self.task_r_dict[r][:-2] if fluid_number_time[(r, j+1)] == 0)
+                              for j in self.task_r_dict[r][:-1] if fluid_number_time[(r, j+1)] == 0)
         # 求解模型
         solution = model.solve()
         x = solution.get_value_dict(X)
         # 输出流体完工时间
-        # process_rate_rj_sum = {(r, j): sum(x[m, (r, j)] * self.process_rate_m_rj_dict[m][(r, j)]
-        #                                    for m in self.machine_rj_dict[(r, j)]) for (r, j) in self.kind_task_tuple}
-        # fluid_makespan = max(fluid_number[(r, j)]/process_rate_rj_sum[(r, j)] for (r, j) in self.kind_task_tuple)
-        # print("流体完工时间：", fluid_makespan)
+        process_rate_rj_sum = {(r, j): sum(x[m, (r, j)] * self.process_rate_m_rj_dict[m][(r, j)]
+                                           for m in self.machine_rj_dict[(r, j)]) for (r, j) in self.kind_task_tuple}
+        fluid_completed_time = max(fluid_number[(r, j)] / process_rate_rj_sum[(r, j)] for (r, j) in self.kind_task_tuple)
+        # print("流体完工时间：", fluid_completed_time)
         return x
 
     def update_fluid_parameter(self, x):
