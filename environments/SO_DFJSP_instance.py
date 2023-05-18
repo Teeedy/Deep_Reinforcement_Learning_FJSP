@@ -75,13 +75,13 @@ class Instance():
 
     def write_file(self):
         """写入csv文件"""
-        os.makedirs(os.path.join('../data/generated', self.file_name), exist_ok=True)  # 新建实例文件夹
+        os.makedirs(os.path.join('../data/DA3C', self.file_name), exist_ok=True)  # 新建实例文件夹
         file_csv = {'based_data.csv': ['kind_count', 'machine_count', 'order_count'],
                     'process_data.csv': ['kind', 'task', 'machine_selectable', 'process_time'],
                     'order_data.csv': ['order', 'time_arrive', 'time_delivery', 'kind_number']}
 
         for csv_name, header in file_csv.items():
-            data_file = os.path.join('../data/generated', self.file_name, csv_name)
+            data_file = os.path.join('../data/DA3C', self.file_name, csv_name)
             with open(data_file, 'w', newline='') as f:
                 writer = csv.writer(f)
                 writer.writerow(header)

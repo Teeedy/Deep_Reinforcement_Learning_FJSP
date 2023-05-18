@@ -1,3 +1,4 @@
+import sys
 from random import randint, uniform
 import numpy as np, copy, csv
 # 英文显示问题
@@ -78,13 +79,14 @@ class Instance():
 
     def write_file(self):
         """写入csv文件"""
-        os.makedirs(os.path.join('../data/generated', self.file_name), exist_ok=True)  # 新建实例文件夹
+        file_path = 'DA3C'
+        os.makedirs(os.path.join(file_path, self.file_name), exist_ok=True)  # 新建实例文件夹
         file_csv = {'based_data.csv': ['kind_count', 'machine_count', 'order_count', 'DDT'],
                     'process_data.csv': ['kind', 'task', 'machine_selectable', 'process_time'],
                     'order_data.csv': ['order', 'time_arrive', 'time_delivery', 'kind_number']}
 
         for csv_name, header in file_csv.items():
-            data_file = os.path.join('../data/generated', self.file_name, csv_name)
+            data_file = os.path.join(file_path, self.file_name, csv_name)
             with open(data_file, 'w', newline='') as f:
                 writer = csv.writer(f)
                 writer.writerow(header)
@@ -102,17 +104,27 @@ class Instance():
                 writer.writerows(rows)
         print("写入完成")
 
+# 生成算例
 if __name__ == '__main__':
-    # 初始化算例集参数
-    DDT_list = [0.5, 1.0, 1.5]
-    machine_count_list = [10, 15, 20]
-    order_count_list = [1, 3, 5]
-    file_name_list = []
-    # 生成各实例文件
-    for DDT in DDT_list:
-        for M in machine_count_list:
-            for S in order_count_list:
-                instance_object = Instance(DDT, M, S)
-                instance_object.write_file()
-                file_name_list.append(instance_object.file_name)
-    print(file_name_list)
+    # 程序需要确认是否覆盖原文件
+    print("程序需要确认继续，请输入 y 继续(覆盖原生成文件，可导致数据丢失)或者 n 取消：")
+    user_input = input()
+    if user_input.lower() == 'y':
+        print("继续执行程序...")
+        # 初始化算例集参数
+        DDT_list = [0.5, 1.0, 1.5]
+        machine_count_list = [10, 15, 20]
+        order_count_list = [1, 3, 5]
+        file_name_list = []
+        # 生成各实例文件
+        for DDT in DDT_list:
+            for M in machine_count_list:
+                for S in order_count_list:
+                    instance_object = Instance(DDT, M, S)
+                    instance_object.write_file()
+                    file_name_list.append(instance_object.file_name)
+        print(file_name_list)
+    else:
+        print("取消执行程序。")
+        sys.exit(0)
+

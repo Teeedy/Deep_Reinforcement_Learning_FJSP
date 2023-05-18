@@ -91,7 +91,7 @@ class DA3C(Base_Agent, Config):
         Config.__init__(self)  # 继承算法超参数类
         self.num_processes = multiprocessing.cpu_count()  # 电脑线程数量|四核八线程
         self.worker_processes = max(1, self.num_processes - 5)  # 启用线程数
-        self.path = 'D:\Python project\Deep_Reinforcement_Learning_FJSP\data\generated'  # 测试算例的存储位置
+        self.path = 'D:\Python project\Deep_Reinforcement_Learning_FJSP\data\DA3C'  # 测试算例的存储位置
         self.file_name = 'DDT1.0_M15_S3'  # 测试算例的文件夹名字
         self.environment_test = SO_DFJSP_Environment(use_instance=False, path=self.path, file_name=self.file_name)  # 测试环境
         self.config = Config

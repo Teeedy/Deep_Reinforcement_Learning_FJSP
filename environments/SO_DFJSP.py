@@ -5,15 +5,14 @@
 """
 import random, math
 import time
-from utilities.Utility_Class import MyError
+from utilities.Utility_Class import MyError, FigGan
 import numpy as np
 from environments.class_FJSP import FJSP
-import matplotlib.pyplot as plt
 
 # 环境类
 class SO_DFJSP_Environment(FJSP):
     """单目标柔性作业车间调度环境"""
-    environment_name = "single object fjsp"
+    environment_name = "Single object DFJSP"
     def __init__(self, use_instance=True, **kwargs):
         super().__init__(use_instance=use_instance, **kwargs)
         # 封装基本属性
@@ -48,7 +47,7 @@ class SO_DFJSP_Environment(FJSP):
         self.delay_time_sum_processed = 0  # 已完工工件的实际总延期时间
         self.delay_time_sum_unprocessed = 0  # 未完工工件的实际总延期时间
         self.delay_time_sum_unprocessed_last = 0  # 上一时间步未完工工件的实际总延期时间
-        self.gap_ave_value_last = 0  # 当前时间步的工序类型gap均值
+        self.gap_ave_value_last = 0  # 上一时间步的工序类型gap均值
         # print("成功定义环境类")
 
     def reset(self):
@@ -370,29 +369,14 @@ class SO_DFJSP_Environment(FJSP):
     def gap_ave_value(self):
         return sum(kind_task_object.gap for kind_task, kind_task_object in self.kind_task_dict.items())/len(self.kind_task_tuple)
 
-class FigGan():
-    def __init__(self, object):
-        self.kind_dict = object.kind_dict
-
-    def figure(self):
-        for kind, kind_object in self.kind_dict.items():
-            for job_object in kind_object.job_arrive_list:
-                for task_object in job_object.task_list:
-                    machine = task_object.machine
-                    plt.barh(machine, task_object.time_end - task_object.time_begin, left=task_object.time_begin,
-                             height=0.4)
-                    plt.text(task_object.time_begin, machine + 0.4,
-                             '%s|%s|%s)' % (task_object.kind, task_object.number, task_object.task),
-                             fontdict={'fontsize': 6})
-        plt.show()
 
 # 测试环境
 if __name__ == '__main__':
     DDT = 1.0
     M = 15
     S = 10
-    file_name = 'DDT1.0_M15_S1'
-    path = '../data/generated'
+    file_name = 'DDT1.0_M15_S3'
+    path = '../data/DA3C'
     time_start = time.time()
     env_object = SO_DFJSP_Environment(use_instance=False, path=path, file_name=file_name)  # 定义环境对象
     state = env_object.reset()  # 初始化状态
@@ -400,7 +384,7 @@ if __name__ == '__main__':
     # 随机选择动作测试环境
     while not env_object.done:
         # action = (random.choice([0, 1, 2, 3, 4, 5]), random.choice([0, 1, 2, 3, 4]))
-        action = [2, 1]
+        action = [2, 0]
         next_state, reward, done = env_object.step(action)
         replay_list.append([state, action, next_state, reward, done])
         state = next_state

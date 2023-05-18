@@ -2,7 +2,7 @@
 调度规则对比算法
 """
 from environments.SO_DFJSP import SO_DFJSP_Environment
-from environments.SO_DFJSP import FigGan
+from utilities.Utility_Class import FigGan, MyError
 import random
 import time
 
@@ -33,7 +33,7 @@ if __name__ == '__main__':
     time_start = time.time()
     state = env_object.reset()  # 初始化状态
     while not env_object.done:
-        action = [1, 0]
+        action = [2, 0]
         next_state, reward, done = env_object.step(action)
         state = next_state
         # print(env_object.machine_idle_list)
