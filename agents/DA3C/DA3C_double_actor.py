@@ -19,7 +19,7 @@ from torch import nn
 from visdom import Visdom
 
 # 监控训练过程
-window_name = 'Double Actor state(1)+action()+reward(5)'
+window_name = 'Double Actor state(1)+action()+reward(1)'
 vis = Visdom()
 win = window_name
 title = window_name
@@ -205,7 +205,7 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
         self.gradient_clipping_norm = hyper_parameter["DA3C"]["gradient_clipping_norm"]  # 梯度裁剪值
         self.discount_rate = hyper_parameter["DA3C"]["discount_rate"]  # 折扣率
         self.exploration_worker_difference = hyper_parameter["DA3C"]["exploration_worker_difference"]
-        self.normalise_rewards = False  # 标准化回报
+        self.normalise_rewards = True  # 标准化回报
         self.actions_size = self.environment_test.actions_size  # 二维离散动作[6, 4]
         self.actor_task_model = actor_task_model  # 工序策略网络
         self.actor_machine_model = actor_machine_model  # 机器策略网络
@@ -246,8 +246,8 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
         """开启工作线程"""
         torch.set_num_threads(1)
         for ep_ix in range(self.episodes_to_run):
-            # self.environment = self.generated_new_environment()  # 重新随机初始化
-            self.environment = self.environment_test  # 用测试算例训练
+            self.environment = self.generated_new_environment()  # 重新随机初始化
+            # self.environment = self.environment_test  # 用测试算例训练
             with self.optimizer_lock:  # 锁定网络更新线程网络参数
                 Base_Agent.copy_model_over(self.actor_task_model, self.local_actor_task_model)
                 Base_Agent.copy_model_over(self.actor_machine_model, self.local_actor_machine_model)
@@ -266,10 +266,10 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
             # 采样一条轨迹
             while not done:
                 action_task, action_task_log_prob = self.pick_action_and_log_prob(self.local_actor_task_model, state,
-                                                                                  epsilon_exploration=0)
+                                                                                  epsilon_exploration)
                 state_add = np.append(state, action_task)  # 带选择的工序规则信息的状态
                 action_machine, action_machine_log_prob = self.pick_action_and_log_prob(self.local_actor_machine_model,
-                                                                                        state_add, epsilon_exploration=0)
+                                                                                        state_add, epsilon_exploration)
                 critic_outputs = self.get_critic_value(self.local_critic_model, state)
                 actions = np.array([action_task, action_machine])  # 二维离散动作
                 task_action_ratio[actions[0]] += 1
@@ -293,17 +293,17 @@ class Actor_Critic_Worker(torch.multiprocessing.Process):
             # 每间隔10个周期运行一次测试算例并动态绘制目标值曲线
             with self.counter.get_lock():
                 self.counter.value += 1
-                # state = self.environment_test.reset()
-                # while not self.environment_test.done:
-                #     action_task = self.pick_action(self.actor_task_model, state)
-                #     state_add = np.append(state, action_task)  # 带选择的工序规则信息的状态
-                #     action_machine = \
-                #         self.pick_action(self.actor_machine_model, state_add)
-                #     actions = np.array([action_task, action_machine])  # 二维离散动作
-                #     next_state, reward, done = self.environment_test.step(actions)
-                #     state = next_state
-                # vis.line(X=[self.counter.value], Y=[self.environment_test.delay_time_sum], win=win, update='append')
-                # print("测试算例总的延期时间：", self.environment_test.delay_time_sum)
+                state = self.environment_test.reset()
+                while not self.environment_test.done:
+                    action_task = self.pick_action(self.actor_task_model, state)
+                    state_add = np.append(state, action_task)  # 带选择的工序规则信息的状态
+                    action_machine = \
+                        self.pick_action(self.actor_machine_model, state_add)
+                    actions = np.array([action_task, action_machine])  # 二维离散动作
+                    next_state, reward, done = self.environment_test.step(actions)
+                    state = next_state
+                vis.line(X=[self.counter.value], Y=[self.environment_test.delay_time_sum], win=win, update='append')
+                print("测试算例总的延期时间：", self.environment_test.delay_time_sum)
 
     def calculate_new_exploration(self):
         """计算新的勘探参数。它在当前的上下3X范围内随机选取一个点"""

@@ -325,7 +325,7 @@ class SO_DFJSP_Environment(FJSP):
 
     def compute_reward(self):
         """回报函数的选择"""
-        function_selected = 5  # 选择的奖励
+        function_selected = 1  # 选择的奖励
         if function_selected == 1:  # 根据相邻状态实际延期时间差值的奖励
             return -(self.delay_time_sum - self.delay_time_sum_last)
         elif function_selected == 2:  # 根据gap_ave差值的奖励
